@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUpRight, Maximize, Minimize, Square, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/app-store";
 import { TaskConversationPage } from "@/components/tasks/conversation/task-conversation-page";
@@ -18,6 +18,7 @@ import type {
   ConversationMeta,
   ConversationStatus,
 } from "@/types/conversations";
+import type { TaskStatus } from "@/types/tasks";
 
 function StatusDot({ status }: { status: ConversationStatus }) {
   if (status === "running") {
@@ -123,6 +124,10 @@ export function TaskDetailPanel() {
   // node actually mounts.
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const [stopping, setStopping] = useState(false);
+  // SSE-fresh status from the embedded TaskConversationPage. The store's
+  // `conversation` is a snapshot frozen when the panel opened, so it can't
+  // tell us a turn started running afterwards — this can.
+  const [livePhase, setLivePhase] = useState<TaskStatus | null>(null);
   const scrollCleanupRef = useRef<(() => void) | null>(null);
   const setPanelScrollRoot = useCallback((node: HTMLDivElement | null) => {
     scrollCleanupRef.current?.();
@@ -145,6 +150,13 @@ export function TaskDetailPanel() {
     };
   }, []);
 
+  // Drop stale live status when the panel switches to another task; the
+  // freshly-mounted TaskConversationPage re-emits its own.
+  const conversationId = conversation?.id ?? null;
+  useEffect(() => {
+    setLivePhase(null);
+  }, [conversationId]);
+
   if (!drawer.shouldRender) return null;
 
   const isCompose = taskPanelMode === "compose" || !conversation;
@@ -162,16 +174,22 @@ export function TaskDetailPanel() {
   const runtimeLabel = conversation ? buildRuntimeLabel(conversation) : null;
   const errorKind = conversation?.errorKind;
 
+  // Stop is only meaningful while the model is actively generating. Prefer
+  // the SSE-fresh status from the embedded page (`"awaiting-input"` is its
+  // own status, so `"running"` is true only mid-generation); fall back to
+  // the store snapshot until the first live event arrives.
+  const llmRunning =
+    livePhase !== null
+      ? livePhase === "running"
+      : conversation?.status === "running" && !conversation.awaitingInput;
+
   const collapsed = headerCollapsed;
 
   // Order: expand (full viewer) · fullscreen toggle · close. Shared by the
   // compose and conversation header variants.
   const actions = (
     <div className="ms-auto flex shrink-0 items-center gap-1">
-      {!isCompose &&
-      conversation &&
-      conversation.status === "running" &&
-      !conversation.awaitingInput ? (
+      {!isCompose && conversation && llmRunning ? (
         <Button
           variant="ghost"
           size="sm"
@@ -321,6 +339,7 @@ export function TaskDetailPanel() {
         <TaskConversationPage
           taskId={conversation.id}
           variant="compact"
+          onLiveStatusChange={setLivePhase}
           returnContext={{
             type: "task",
             taskId: conversation.id,

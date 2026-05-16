@@ -331,6 +331,14 @@ export interface TaskConversationPageProps {
    * into the full task view rather than the outer list.
    */
   returnContext?: import("@/stores/app-store").SelectedSection;
+  /**
+   * Fires whenever the live task status changes (and with `null` on
+   * unmount). Lets a compact-embed host (e.g. TaskDetailPanel) drive chrome
+   * — like the Stop button — off the SSE-fresh status instead of a stale
+   * store snapshot taken when the panel opened. `"awaiting-input"` is its
+   * own TaskStatus, so `"running"` already means the model is generating.
+   */
+  onLiveStatusChange?: (status: TaskStatus | null) => void;
 }
 
 export function TaskConversationPage({
@@ -338,6 +346,7 @@ export function TaskConversationPage({
   variant = "full",
   readOnly = false,
   returnContext,
+  onLiveStatusChange,
 }: TaskConversationPageProps) {
   const { t } = useLocale();
   const isDemo = taskId === "demo";
@@ -636,6 +645,20 @@ export function TaskConversationPage({
       es.close();
     };
   }, [isDemo, taskId]);
+
+  // Surface SSE-fresh status to a compact-embed host (TaskDetailPanel) so
+  // chrome like the Stop button reacts to live runs, not the stale store
+  // snapshot. Ref-held callback keeps this off the effect deps.
+  const liveStatusCbRef = useRef(onLiveStatusChange);
+  liveStatusCbRef.current = onLiveStatusChange;
+  const liveStatus = task?.meta.status ?? null;
+  useEffect(() => {
+    if (liveStatus === null) return;
+    liveStatusCbRef.current?.(liveStatus);
+  }, [liveStatus]);
+  useEffect(() => {
+    return () => liveStatusCbRef.current?.(null);
+  }, []);
 
   // Cleanup demo settle timer
   useEffect(() => {
