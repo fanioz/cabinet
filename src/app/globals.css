@@ -456,9 +456,16 @@ html[lang^="zh-Hant"] h1.font-ui, html[lang^="zh-Hant"] h2.font-ui {
   text-align: start;
 }
 
+/* The inline indent lives on the <li>, not the <ul>/<ol>. Each list item
+   carries `dir="auto"` (AutoDirection), so putting `padding-inline-start`
+   on the item makes its outside marker resolve to the item's own
+   direction — a Hebrew item's bullet/number sits on the right, an English
+   item's on the left, even within the same list. Padding on the container
+   would instead follow the container's direction (LTR), pinning every
+   marker left regardless of the text. */
 .tiptap ul,
 .tiptap ol {
-  padding-inline-start: 1.5rem;
+  padding-inline-start: 0;
   margin-bottom: 0.75rem;
 }
 
@@ -471,8 +478,23 @@ html[lang^="zh-Hant"] h1.font-ui, html[lang^="zh-Hant"] h2.font-ui {
 }
 
 .tiptap li {
+  padding-inline-start: 1.5rem;
   margin-bottom: 0.25rem;
   line-height: 1.65;
+}
+
+/* In an explicitly RTL document every list item is RTL — bullet/number on
+   the right, text right-aligned — even when the item starts with a Latin
+   word (a URL, a brand). Per-item `dir="auto"` plus the inherited
+   `unicode-bidi: plaintext` would otherwise resolve such an item LTR and
+   pin its marker left, mismatched against the RTL column. `isolate` (not
+   `plaintext`) makes the base direction come from `direction: rtl` while
+   the bidi algorithm still orders embedded Latin runs correctly. LTR
+   documents keep per-item auto, so a Hebrew list there still flips itself. */
+.tiptap[dir="rtl"] li,
+.tiptap[dir="rtl"] li > p {
+  direction: rtl;
+  unicode-bidi: isolate;
 }
 
 .tiptap li p {
@@ -634,6 +656,10 @@ html[lang^="zh-Hant"] h1.font-ui, html[lang^="zh-Hant"] h2.font-ui {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
+  /* No list marker here — the checkbox is the marker. Cancel the inline
+     indent that .tiptap li adds; dir="auto" on the item still flips the
+     flex order so the checkbox leads on the correct side. */
+  padding-inline-start: 0;
 }
 
 .tiptap .task-list li label {
@@ -1233,6 +1259,21 @@ html[data-custom-theme="cyber"] :where(button:not([data-no-bevel])):hover {
   direction: ltr;
   unicode-bidi: isolate;
   text-align: left;
+}
+/* Same per-item marker logic as the editor's .tiptap lists: the inline
+   indent rides on the <li> (which carries dir="auto"), not the container,
+   so a Hebrew item's bullet/number lands on the right. Overrides the
+   container padding the prose/typography plugin sets on <ul>/<ol>. */
+.rtl-aware ul,
+.rtl-aware ol {
+  padding-inline-start: 0;
+}
+.rtl-aware li {
+  padding-inline-start: 1.5rem;
+}
+.rtl-aware ul[data-type="taskList"] li,
+.rtl-aware li[data-type="taskItem"] {
+  padding-inline-start: 0;
 }
 
 /* ── In-page find (Cmd+F) match highlighting ── */
