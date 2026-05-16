@@ -8,14 +8,20 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+/** Hover/focus reveal delay for board tooltips (ms). */
+const HOVER_DELAY_MS = 500;
+
 /**
- * Instant hover/focus tooltip for the task board's icon-only controls.
+ * Hover/focus tooltip for the task board's icon-only controls.
  *
  * The board historically leaned on native `title=` attributes, which only
  * surface after a ~1.5s delay and never on keyboard focus — so the meaning
  * of the status glyphs, lane icons, and row-action buttons was effectively
  * undiscoverable. This wraps a single trigger element with the app's
- * Base UI tooltip at `delay={0}` so the explanation appears immediately.
+ * Base UI tooltip at a 0.5s delay (long enough not to flicker as the
+ * pointer crosses the dense action cluster) and the `themed` content
+ * variant, so the bubble uses the user's selected theme colors
+ * (`--popover` / `--popover-foreground`) rather than a hard-contrast bubble.
  *
  * Self-contained (carries its own `TooltipProvider`) so callers can drop it
  * around any one icon without threading a provider through the board tree —
@@ -36,10 +42,12 @@ export function IconHint({
 }) {
   if (label == null || label === "") return children;
   return (
-    <TooltipProvider delay={0}>
+    <TooltipProvider delay={HOVER_DELAY_MS}>
       <Tooltip>
         <TooltipTrigger render={children} />
-        <TooltipContent side={side}>{label}</TooltipContent>
+        <TooltipContent side={side} variant="themed">
+          {label}
+        </TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
