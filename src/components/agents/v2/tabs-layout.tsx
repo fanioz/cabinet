@@ -67,7 +67,10 @@ function TopBar({
   const { loading, refresh, visibilityMode, setVisibilityMode } =
     useAgentsContext();
   return (
-    <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/70 bg-background px-4 py-2 md:h-12 md:flex-nowrap md:py-0">
+    <header
+      className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/70 bg-background px-4 py-2 transition-[padding] duration-200 md:h-12 md:flex-nowrap md:py-0"
+      style={{ paddingInlineStart: `calc(1rem + var(--sidebar-toggle-offset, 0px))` }}
+    >
       <div className="flex items-center gap-2">
         <h1 className="text-[14px] font-semibold tracking-tight">Team</h1>
         {loading && (

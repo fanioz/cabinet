@@ -153,11 +153,11 @@ export function Sidebar() {
     }
   }
 
-  const desktopClass = collapsed ? "w-0 overflow-hidden" : "shrink-0";
-  const mobileClass = cn(
-    "fixed inset-y-0 start-0 z-40",
-    collapsed ? "w-0 overflow-hidden" : "w-[280px]"
-  );
+  // The expanded panel width. Kept constant on the inner wrapper so the
+  // tree never reflows mid-animation — only the <aside> width animates and
+  // clips it (overflow-hidden). Animating the heavy tree's layout every
+  // frame was what made collapse/expand feel slow.
+  const panelWidth = isMobile ? 280 : sidebarWidth;
 
   return (
     <>
@@ -171,11 +171,16 @@ export function Sidebar() {
       <aside
         suppressHydrationWarning
         className={cn(
-          "flex flex-col bg-sidebar transition-all duration-200 h-screen overflow-hidden [&_button]:cursor-pointer",
-          isMobile ? mobileClass : desktopClass
+          "flex bg-sidebar h-screen overflow-hidden transition-[width] duration-200 will-change-[width] [&_button]:cursor-pointer",
+          isMobile && "fixed inset-y-0 start-0 z-40",
+          !isMobile && !collapsed && "shrink-0"
         )}
-        style={!isMobile && !collapsed ? { width: sidebarWidth } : undefined}
+        style={{ width: collapsed ? 0 : panelWidth }}
       >
+        <div
+          className="flex h-full flex-col"
+          style={{ width: panelWidth }}
+        >
         <div className="sidebar-header flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-1">
             <NavArrows />
@@ -280,6 +285,7 @@ export function Sidebar() {
             <Settings className="h-3.5 w-3.5" />
           </Button>
         </div>
+        </div>
       </aside>
       {!isMobile && !collapsed && (
         <div className="relative -ms-px h-screen w-px shrink-0 bg-border">
@@ -300,7 +306,7 @@ export function Sidebar() {
           size="icon"
           aria-label={t("sidebar:expandSidebar")}
           title={t("sidebar:expandSidebar")}
-          className="absolute top-3 start-2 z-20 h-7 w-7"
+          className="absolute top-3 start-2 z-20 h-7 w-7 animate-in fade-in zoom-in-95 duration-200"
           onClick={() => setCollapsed(false)}
         >
           <PanelLeft className="h-4 w-4 rtl:rotate-180" />

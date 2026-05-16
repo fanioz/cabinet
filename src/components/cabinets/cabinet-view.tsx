@@ -207,7 +207,9 @@ export function CabinetView({ cabinetPath }: { cabinetPath: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* ── Header row ── */}
-        <header className="flex flex-wrap items-center gap-3 border-b border-border/70 bg-background/95 px-4 py-2.5 sm:px-6">
+        <header
+          className="flex flex-wrap items-center gap-3 border-b border-border/70 bg-background/95 py-2.5 pe-4 ps-[calc(1rem+var(--sidebar-toggle-offset,0px))] transition-[padding] duration-200 sm:pe-6 sm:ps-[calc(1.5rem+var(--sidebar-toggle-offset,0px))]"
+        >
           <div className="flex min-w-0 items-center gap-3">
             <h1 className="truncate text-[14px] font-semibold tracking-tight text-foreground">
               {cabinetName}
