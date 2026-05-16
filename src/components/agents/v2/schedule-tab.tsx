@@ -71,7 +71,7 @@ export function ScheduleTab() {
               onClick={() => setMode(m)}
               className={
                 mode === m
-                  ? "rounded px-2.5 py-1 text-[11.5px] font-medium bg-foreground text-background"
+                  ? "rounded px-2.5 py-1 text-[11.5px] font-medium bg-primary text-primary-foreground"
                   : "rounded px-2.5 py-1 text-[11.5px] font-medium text-muted-foreground hover:text-foreground"
               }
             >

@@ -145,7 +145,7 @@ export function ScheduleView({
               className={cn(
                 "rounded px-2.5 py-1 text-[11.5px] font-medium capitalize transition-colors",
                 mode === m
-                  ? "bg-foreground text-background"
+                  ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
