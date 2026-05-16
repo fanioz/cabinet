@@ -290,6 +290,28 @@ html[dir="rtl"] .font-logo {
   font-family: var(--font-logo-rtl), Cardo, Georgia, serif !important;
 }
 
+/* UI font — forces the theme's *body* font onto an element that would
+   otherwise inherit the theme heading font (h1–h4). Lets chrome titles
+   (Team / Tasks page headers) match the breadcrumb leaf, which is a
+   <span> and so already renders in the body font. Mirrors the
+   `.font-logo` override pattern: class selector + !important beats the
+   `html[data-custom-theme] h1` and CJK `html:lang() h1` overrides. */
+html[data-custom-theme] h1.font-ui,
+html[data-custom-theme] h2.font-ui,
+html:lang(zh-CN) h1.font-ui, html:lang(zh-CN) h2.font-ui,
+html[lang^="zh-Hans"] h1.font-ui, html[lang^="zh-Hans"] h2.font-ui,
+.font-ui {
+  font-family: var(--font-theme, var(--font-sans)) !important;
+}
+html:lang(zh-CN) h1.font-ui, html:lang(zh-CN) h2.font-ui,
+html[lang^="zh-Hans"] h1.font-ui, html[lang^="zh-Hans"] h2.font-ui {
+  font-family: var(--font-theme, var(--font-sans)), "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+}
+html:lang(zh-TW) h1.font-ui, html:lang(zh-TW) h2.font-ui,
+html[lang^="zh-Hant"] h1.font-ui, html[lang^="zh-Hant"] h2.font-ui {
+  font-family: var(--font-theme, var(--font-sans)), "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif !important;
+}
+
 .scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
