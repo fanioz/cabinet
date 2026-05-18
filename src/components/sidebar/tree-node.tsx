@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   Archive,
   ChevronRight,
@@ -47,6 +47,7 @@ import {
   ContextMenuSeparator,
   ContextMenuLabel,
   ContextMenuGroup,
+  ContextMenuShortcut,
 } from "@/components/ui/context-menu";
 import {
   Dialog,
@@ -62,6 +63,7 @@ import { LinkRepoDialog } from "./link-repo-dialog";
 import { NewCabinetDialog } from "./new-cabinet-dialog";
 import { useFileImport } from "./use-file-import";
 import { getDataDir } from "@/lib/data-dir-cache";
+import { isMacPlatform, isEditableTarget, formatShortcut } from "@/lib/keys";
 import { useLocale } from "@/i18n/use-locale";
 
 interface TreeNodeProps {
@@ -132,6 +134,19 @@ export function TreeNode({
   const isExpanded = hasChildren && expandedPaths.has(node.path);
   const title = node.frontmatter?.title || node.name;
 
+  const isMac = useMemo(isMacPlatform, []);
+  // Hints shown on the right of the context-menu rows. Move-to is handled
+  // app-wide in tree-view.tsx (Cmd+Shift+M); rename/delete are wired on the
+  // selected row by the effect below. Delete is Cmd+Backspace on macOS
+  // (Finder convention) so a stray Backspace can't nuke a page; plain Del
+  // elsewhere.
+  const renameShortcut = formatShortcut(["f2"], isMac);
+  const moveShortcut = formatShortcut(["cmd", "shift", "m"], isMac);
+  const deleteShortcut = formatShortcut(
+    isMac ? ["cmd", "backspace"] : ["del"],
+    isMac
+  );
+
   useEffect(() => {
     if (!isSelected || focusTick === 0) return;
     const el = rowRef.current;
@@ -141,6 +156,51 @@ export function TreeNode({
     const t = setTimeout(() => setBlink(false), 1400);
     return () => clearTimeout(t);
   }, [isSelected, focusTick]);
+
+  // File-explorer keys for the selected row: F2 → rename, Cmd+Backspace
+  // (macOS) / Del → delete. Gated on isSelected so exactly one row's
+  // listener is ever live, no matter how large the tree is. Mirrors the
+  // existing context-menu actions (opens the same dialogs) rather than
+  // mutating directly, so the confirm step is preserved.
+  useEffect(() => {
+    if (!isSelected || isMoving) return;
+    const anyDialogOpen =
+      subPageOpen ||
+      newFolderOpen ||
+      renameOpen ||
+      deleteOpen ||
+      linkRepoOpen ||
+      createCabinetOpen;
+    const onKey = (e: KeyboardEvent) => {
+      if (anyDialogOpen || isEditableTarget(e.target)) return;
+      if (e.key === "F2") {
+        e.preventDefault();
+        setRenameTitle(title);
+        setRenameOpen(true);
+        return;
+      }
+      const isDelete = isMac
+        ? e.metaKey && (e.key === "Backspace" || e.key === "Delete")
+        : e.key === "Delete" && !e.metaKey && !e.ctrlKey && !e.altKey;
+      if (isDelete) {
+        e.preventDefault();
+        setDeleteOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [
+    isSelected,
+    isMoving,
+    isMac,
+    title,
+    subPageOpen,
+    newFolderOpen,
+    renameOpen,
+    deleteOpen,
+    linkRepoOpen,
+    createCabinetOpen,
+  ]);
 
   const handleClick = () => {
     selectPage(node.path);
@@ -629,11 +689,13 @@ export function TreeNode({
             <ContextMenuItem onClick={() => { setRenameTitle(title); setRenameOpen(true); }}>
               <Pencil className="h-4 w-4 me-2" />
               Rename
+              <ContextMenuShortcut>{renameShortcut}</ContextMenuShortcut>
             </ContextMenuItem>
             {onMoveToRequest && (
               <ContextMenuItem onClick={() => onMoveToRequest(node)}>
                 <ArrowRightLeft className="h-4 w-4 me-2" />
                 Move to…
+                <ContextMenuShortcut>{moveShortcut}</ContextMenuShortcut>
               </ContextMenuItem>
             )}
             <ContextMenuItem onClick={() => navigator.clipboard.writeText(node.path)}>
@@ -666,6 +728,7 @@ export function TreeNode({
               <Trash2 className="h-4 w-4 me-2" />
             )}
             {node.isLinked ? "Unlink" : "Delete"}
+            <ContextMenuShortcut>{deleteShortcut}</ContextMenuShortcut>
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
