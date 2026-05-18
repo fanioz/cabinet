@@ -314,6 +314,7 @@ export async function movePage(
     ? resolveContentPath(toParentPath)
     : resolveContentPath("");
   const toResolved = path.join(toDir, path.basename(fromEntry.fsPath));
+  const name = fromEntry.virtualName;
 
   const fromParentVirtual = fromPath.split("/").slice(0, -1).join("/");
   const isReorder = fromEntry.fsPath === toResolved;
@@ -342,7 +343,6 @@ export async function movePage(
     await removeSidecarEntry(fromParentVirtual, fromEntry.virtualName).catch(() => {});
   }
 
-  const name = fromEntry.virtualName;
   const { prevName, nextName } = options;
   if (prevName !== undefined || nextName !== undefined) {
     const order = await computeInsertOrder(

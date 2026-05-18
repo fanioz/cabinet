@@ -176,13 +176,21 @@ function runShellCommand(command: string): Promise<{
   spawnError: string | null;
 }> {
   return new Promise((resolve) => {
-    const child = spawn("/bin/sh", ["-c", command], {
-      env: {
-        ...process.env,
-        PATH: getAdapterRuntimePath(),
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const env = {
+      ...process.env,
+      PATH: getAdapterRuntimePath(),
+    };
+    const child =
+      process.platform === "win32"
+        ? spawn(command, {
+            env,
+            shell: true,
+            stdio: ["ignore", "pipe", "pipe"],
+          })
+        : spawn("/bin/sh", ["-c", command], {
+            env,
+            stdio: ["ignore", "pipe", "pipe"],
+          });
 
     let stdout = "";
     let stderr = "";
