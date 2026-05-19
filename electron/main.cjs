@@ -572,6 +572,25 @@ ipcMain.handle("cabinet:uninstall-app", () => {
   return macosUninstallApp();
 });
 
+// OS keyboard / input language for first-run locale auto-detection.
+// getPreferredSystemLanguages() reflects the user's macOS/Windows language &
+// keyboard ordering; getLocale()/getSystemLocale() are conservative fallbacks.
+ipcMain.handle("cabinet:get-preferred-languages", () => {
+  try {
+    return {
+      preferred:
+        typeof app.getPreferredSystemLanguages === "function"
+          ? app.getPreferredSystemLanguages()
+          : [],
+      locale: typeof app.getLocale === "function" ? app.getLocale() : "",
+      system:
+        typeof app.getSystemLocale === "function" ? app.getSystemLocale() : "",
+    };
+  } catch {
+    return { preferred: [], locale: "", system: "" };
+  }
+});
+
 async function createWindow() {
   const runtime = await startEmbeddedCabinet();
 

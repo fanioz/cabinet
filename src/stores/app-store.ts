@@ -5,6 +5,12 @@ import type { ProviderInfo } from "@/types/agents";
 import { ROOT_CABINET_PATH } from "@/lib/cabinets/paths";
 import { dedupFetch } from "@/lib/api/dedup-fetch";
 
+// Module-level in-flight guard for per-provider model hydration so N picker
+// mounts / tab switches collapse to one request. Cleared on settle so a
+// failed fetch can be retried on the next interaction (server 60s-caches the
+// success path anyway).
+const inflightModelFetches = new Map<string, Promise<void>>();
+
 export type SectionType =
   | "home"
   | "cabinet"
@@ -138,6 +144,16 @@ interface AppState {
   providersLoading: boolean;
   providersLoaded: boolean;
   loadProviders: () => Promise<void>;
+  /**
+   * Hydrate one provider's real, entitlement-gated model list from
+   * GET /api/agents/providers/:id/models and merge it into `providers`.
+   * Lazy + deduped — call it when a dynamic-discovery provider's tab opens.
+   * `refresh` busts the server's 60s cache (use after the user adds a key).
+   */
+  ensureProviderModels: (
+    providerId: string,
+    opts?: { refresh?: boolean }
+  ) => Promise<void>;
   setSection: (section: SelectedSection) => void;
   pushSection: (next: SelectedSection, from: SelectedSection) => void;
   popReturnTo: () => void;
@@ -268,6 +284,59 @@ export const useAppStore = create<AppState>((set, get) => ({
     } finally {
       set({ providersLoading: false });
     }
+  },
+
+  ensureProviderModels: async (providerId, opts) => {
+    const refresh = opts?.refresh === true;
+    const dedupeKey = refresh ? `${providerId}::refresh` : providerId;
+
+    const existing = get().providers.find((p) => p.id === providerId);
+    // Already hydrated and not a forced refresh → nothing to do.
+    if (existing?.modelsHydrated && !refresh) return;
+    const pending = inflightModelFetches.get(dedupeKey);
+    if (pending) return pending;
+
+    const run = (async () => {
+      try {
+        const url = `/api/agents/providers/${encodeURIComponent(providerId)}/models${
+          refresh ? "?refresh=1" : ""
+        }`;
+        const response = await dedupFetch(url);
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          models?: ProviderInfo["models"];
+          dynamic?: boolean;
+        };
+        const models = data.models;
+        if (!Array.isArray(models)) return;
+        // Only treat the list as authoritative when it's the provider's live
+        // list. An offline fallback (dynamic:false — CLI not runnable) still
+        // gets merged for display, but modelsHydrated stays false so
+        // resolveProviderModel keeps preserving a saved id instead of
+        // snapping it to the fallback's first entry just because we're
+        // transiently offline. A later interaction retries.
+        const isLive = data.dynamic === true;
+        set((state) => ({
+          providers: state.providers.map((p) =>
+            p.id === providerId
+              ? {
+                  ...p,
+                  models: models.length > 0 ? models : p.models,
+                  modelsHydrated: isLive ? true : p.modelsHydrated,
+                }
+              : p
+          ),
+        }));
+      } catch {
+        // Leave modelsHydrated unset so the resolver keeps preserving any
+        // saved model id and a later interaction retries.
+      } finally {
+        inflightModelFetches.delete(dedupeKey);
+      }
+    })();
+
+    inflightModelFetches.set(dedupeKey, run);
+    return run;
   },
 
   setSection: (section) => {

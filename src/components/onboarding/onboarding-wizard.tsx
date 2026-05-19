@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   Copy,
   ExternalLink,
+  Globe,
   House,
   Loader2,
   Rocket,
@@ -55,6 +56,16 @@ import {
 } from "@/lib/telemetry/waitlist-client";
 import { acknowledgeDisclaimer } from "@/components/layout/breaking-changes-warning";
 import { useLocale } from "@/i18n/use-locale";
+import i18n from "@/i18n";
+import {
+  LOCALE_LABELS,
+  SUPPORTED_LOCALES,
+  localeToDir,
+} from "@/i18n";
+import {
+  detectSystemLocale,
+  hasExplicitLocale,
+} from "@/i18n/detect-system-locale";
 
 type OnboardingVerifyStatus =
   | "pass"
@@ -247,6 +258,57 @@ function CommunityCardTile({ card }: { card: CommunityCard }) {
 // and getAlwaysChecked below. The old KEYWORD_CHECKS / ALWAYS_CHECKED constants
 // were per-room-type "office" defaults.
 
+// i18n helpers for the data-module strings (rooms.ts / DEPARTMENT_ORDERS).
+// The English values in ROOMS / *_ORDER stay the structural source of truth
+// (and server fallback); these look up the localized copy at render time,
+// with the English string as the i18next defaultValue so a missing key never
+// blanks the UI.
+function roomText(id: RoomType, field: string, fallback: string): string {
+  return i18n.t(`onboarding:rooms.${id}.${field}`, fallback);
+}
+
+function roomExampleAgent(id: RoomType, idx: number, fallback: string): string {
+  return i18n.t(`onboarding:rooms.${id}.exampleAgents.${idx}`, fallback);
+}
+
+// Distinct English department labels → kebab key. The English label remains
+// the internal grouping Map key in groupByDepartment(); this only maps the
+// label when it's rendered as a visible section header.
+const DEPARTMENT_LABEL_KEYS: Record<string, string> = {
+  Leadership: "leadership",
+  Marketing: "marketing",
+  Content: "content",
+  Engineering: "engineering",
+  "Product & Design": "product-and-design",
+  Business: "business",
+  Research: "research",
+  "Finance & Ops": "finance-and-ops",
+  Personal: "personal",
+  "Second brain": "second-brain",
+  Writing: "writing",
+  Tools: "tools",
+  "Life admin": "life-admin",
+  "From the Office": "from-the-office",
+  "Writing & notes": "writing-and-notes",
+  Other: "other",
+  Household: "household",
+  Admin: "admin",
+  Money: "money",
+  Product: "product",
+  Design: "design",
+  Sales: "sales",
+  Support: "support",
+  Analytics: "analytics",
+  Finance: "finance",
+  Legal: "legal",
+  People: "people",
+};
+
+function departmentLabelText(label: string): string {
+  const key = DEPARTMENT_LABEL_KEYS[label];
+  return key ? i18n.t(`onboarding:departments.${key}`, label) : label;
+}
+
 function getKeywordChecksForRoom(roomType: RoomType): [RegExp, string[]][] {
   return ROOMS[roomType].keywordMap;
 }
@@ -300,7 +362,7 @@ function TeamCarousel({
   roomType: RoomType;
   onSelect: (t: RegistryTemplate) => void;
 }) {
-  const { dir } = useLocale();
+  const { t, dir } = useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
   const isPausedRef = useRef(false);
   const positionRef = useRef(0);
@@ -382,7 +444,7 @@ function TeamCarousel({
                     {item.name}
                   </p>
                   <span className="text-[9px] shrink-0" style={{ color: WEB.textTertiary }}>
-                    {agentCount} agents
+                    {t("onboarding:team.agentCount", { count: agentCount })}
                   </span>
                 </div>
                 <p className="text-[9px] leading-snug line-clamp-2" style={{ color: WEB.textSecondary }}>
@@ -394,6 +456,103 @@ function TeamCarousel({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Compact language switcher pinned to the wizard chrome — available from
+ * the very first screen so the user can override the auto-detected locale
+ * immediately. Native labels (own script) + per-locale dir, like Settings.
+ */
+function WizardLanguagePicker() {
+  const { locale, setLocale, t } = useLocale();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [open]);
+
+  return (
+    <div
+      ref={ref}
+      className="absolute z-50"
+      style={{ top: 16, insetInlineEnd: 16 }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={t("settings:language.title")}
+        className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
+        style={{
+          background: WEB.bgCard,
+          borderColor: WEB.border,
+          color: WEB.textSecondary,
+        }}
+      >
+        <Globe className="h-3.5 w-3.5" />
+        <span className="max-w-[10rem] truncate">{LOCALE_LABELS[locale]}</span>
+        <ChevronDown className="h-3 w-3" style={{ color: WEB.textTertiary }} />
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          className="absolute mt-2 max-h-[60vh] w-[min(22rem,80vw)] overflow-y-auto rounded-xl border p-1.5 shadow-lg"
+          style={{
+            insetInlineEnd: 0,
+            background: WEB.bgCard,
+            borderColor: WEB.border,
+          }}
+        >
+          <div className="grid grid-cols-2 gap-1">
+            {SUPPORTED_LOCALES.map((code) => {
+              const active = code === locale;
+              return (
+                <button
+                  key={code}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  dir={localeToDir(code)}
+                  onClick={() => {
+                    setLocale(code);
+                    setOpen(false);
+                  }}
+                  className="truncate rounded-lg px-2.5 py-1.5 text-start text-xs transition-colors"
+                  style={
+                    active
+                      ? {
+                          background: WEB.accentBg,
+                          color: WEB.accent,
+                          fontWeight: 600,
+                        }
+                      : { color: WEB.textSecondary }
+                  }
+                >
+                  {LOCALE_LABELS[code]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -532,7 +691,7 @@ function IntroStep({ onNext }: { onNext: () => void }) {
               style={{ background: WEB.accent }}
             >
               {t("onboarding:intro.getStarted")}
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4 rtl:rotate-180" />
             </button>
           </div>
         </div>
@@ -556,7 +715,7 @@ function CabinetCreatedScreen({
   roomType: RoomType;
   onContinue: () => void;
 }) {
-  const { dir } = useLocale();
+  const { t, dir } = useLocale();
   const slideOffset = dir === "rtl" ? "translateX(8px)" : "translateX(-8px)";
   const roomConfig = ROOMS[roomType];
   const RoomIcon = roomConfig.icon;
@@ -570,20 +729,20 @@ function CabinetCreatedScreen({
     lines.push({ text: ".agents/", indent: 1 });
     if (template.agentCount > 0) {
       const count = template.agentCount;
-      lines.push({ text: `${count} agent${count > 1 ? "s" : ""} ready to work`, indent: 2, icon: "🤖" });
+      lines.push({ text: t("onboarding:cabinetCreated.agentsReady", { count }), indent: 2, icon: "🤖" });
     }
     lines.push({ text: ".jobs/", indent: 1 });
     if (template.jobCount > 0) {
       const count = template.jobCount;
-      lines.push({ text: `${count} scheduled job${count > 1 ? "s" : ""}`, indent: 2, icon: "⏱" });
+      lines.push({ text: t("onboarding:cabinetCreated.scheduledJobs", { count }), indent: 2, icon: "⏱" });
     }
     if (template.childCount > 0) {
-      lines.push({ text: `${template.childCount} sub-cabinet${template.childCount > 1 ? "s" : ""}`, indent: 2, icon: "📂" });
+      lines.push({ text: t("onboarding:cabinetCreated.subCabinets", { count: template.childCount }), indent: 2, icon: "📂" });
     }
     lines.push({ text: ".cabinet-state/", indent: 1 });
     lines.push({ text: "index.md", indent: 1 });
     return lines;
-  }, [cabinetName, template]);
+  }, [cabinetName, template, t]);
 
   useEffect(() => {
     if (visibleLines >= treeLines.length) {
@@ -602,10 +761,10 @@ function CabinetCreatedScreen({
       <div className="text-center space-y-2">
         <CheckCircle2 className="size-10 mx-auto" style={{ color: WEB.accent }} />
         <h1 className="font-logo text-2xl tracking-tight italic" style={{ color: WEB.text }}>
-          Your cabinet has been created
+          {t("onboarding:cabinetCreated.heading")}
         </h1>
         <p className="text-sm" style={{ color: WEB.textSecondary }}>
-          Everything is set up and ready to go.
+          {t("onboarding:cabinetCreated.subtitle")}
         </p>
       </div>
 
@@ -618,10 +777,10 @@ function CabinetCreatedScreen({
           <House className="size-3.5" style={{ color: WEB.accent }} />
           <span style={{ color: WEB.text, fontWeight: 500 }}>{homeName}</span>
         </span>
-        <ChevronRight className="size-3.5" style={{ color: WEB.textTertiary }} />
+        <ChevronRight className="size-3.5 rtl:rotate-180" style={{ color: WEB.textTertiary }} />
         <span className="inline-flex items-center gap-1.5">
           <RoomIcon className="size-3.5" style={{ color: WEB.accent }} />
-          <span style={{ color: WEB.text, fontWeight: 500 }}>{roomConfig.label}</span>
+          <span style={{ color: WEB.text, fontWeight: 500 }}>{roomText(roomType, "label", roomConfig.label)}</span>
         </span>
       </div>
 
@@ -686,8 +845,8 @@ function CabinetCreatedScreen({
           transform: showButton ? "translateY(0)" : "translateY(8px)",
         }}
       >
-        Continue setup
-        <ArrowRight className="w-3.5 h-3.5" />
+        {t("onboarding:cabinetCreated.continue")}
+        <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
       </button>
     </div>
   );
@@ -737,7 +896,7 @@ function WelcomeBackStep({
         }}
       >
         {t("onboarding:welcomeBack.continue")}
-        <ArrowRight className="w-3.5 h-3.5" />
+        <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
       </button>
     </div>
   );
@@ -770,6 +929,7 @@ function TeamBuildStep({
   onBack: () => void;
   onNext: () => void;
 }) {
+  const { t } = useLocale();
   const [phase, setPhase] = useState(0);
   // phase 0: title
   // phase 1: "import" label
@@ -891,7 +1051,7 @@ function TeamBuildStep({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setImportError(data?.error || "Import failed");
+        setImportError(data?.error || t("onboarding:team.importFailed"));
         setImportBusy(false);
         return;
       }
@@ -900,7 +1060,7 @@ function TeamBuildStep({
       setImportedCabinet({ name: importName.trim() || importTemplate.name, template: importTemplate });
       setImportTemplate(null);
     } catch {
-      setImportError("Import failed. Check your connection.");
+      setImportError(t("onboarding:team.importFailedConnection"));
     } finally {
       setImportBusy(false);
     }
@@ -927,10 +1087,13 @@ function TeamBuildStep({
         style={{ opacity: 1 }}
       >
         <h1 className="font-logo text-2xl tracking-tight italic">
-          Build <span style={{ color: WEB.accent }}>your</span> team
+          <Trans
+            i18nKey="onboarding:team.heading"
+            components={{ accent: <span style={{ color: WEB.accent }} /> }}
+          />
         </h1>
         <p className="text-sm" style={{ color: WEB.textSecondary }}>
-          Each cabinet is an AI team — agents, tasks, and a shared knowledge base, working together as one.
+          {t("onboarding:team.subtitle")}
         </p>
       </div>
 
@@ -949,14 +1112,14 @@ function TeamBuildStep({
             className="text-[11px] font-semibold uppercase tracking-wider"
             style={{ color: WEB.textTertiary }}
           >
-            Start from a template
+            {t("onboarding:team.startFromTemplate")}
           </p>
           <button
             onClick={() => setRegistryOpen(true)}
             className="text-[11px] font-semibold transition-colors"
             style={{ color: WEB.accent }}
           >
-            Browse all &rarr;
+            {t("onboarding:team.browseAll")} &rarr;
           </button>
         </div>
         <div
@@ -980,7 +1143,7 @@ function TeamBuildStep({
             style={{ color: WEB.accent }}
           >
             <CheckCircle2 className="inline size-3 mr-1 -mt-px" />
-            {importedSlugs.size} cabinet{importedSlugs.size > 1 ? "s" : ""} imported
+            {t("onboarding:team.cabinetsImported", { count: importedSlugs.size })}
           </p>
         )}
       </div>
@@ -993,7 +1156,7 @@ function TeamBuildStep({
         >
           <DialogHeader>
             <DialogTitle style={{ color: WEB.text }}>
-              Import {importTemplate?.name}
+              {t("onboarding:team.importTitle", { name: importTemplate?.name })}
             </DialogTitle>
           </DialogHeader>
           {importTemplate && (
@@ -1002,15 +1165,15 @@ function TeamBuildStep({
                 {importTemplate.description}
               </p>
               <div className="flex gap-4 text-xs" style={{ color: WEB.textTertiary }}>
-                <span>{importTemplate.agentCount} agents</span>
-                <span>{importTemplate.jobCount} jobs</span>
+                <span>{t("onboarding:team.agentCount", { count: importTemplate.agentCount })}</span>
+                <span>{t("onboarding:team.jobCount", { count: importTemplate.jobCount })}</span>
                 {importTemplate.childCount > 0 && (
-                  <span>{importTemplate.childCount} sub-cabinets</span>
+                  <span>{t("onboarding:team.subCabinetCount", { count: importTemplate.childCount })}</span>
                 )}
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium" style={{ color: WEB.textSecondary }}>
-                  Cabinet name
+                  {t("onboarding:team.cabinetNameLabel")}
                 </label>
                 <input
                   value={importName}
@@ -1034,7 +1197,7 @@ function TeamBuildStep({
                   className="rounded-full px-4 py-2 text-sm font-medium transition-colors"
                   style={{ color: WEB.textSecondary }}
                 >
-                  Cancel
+                  {t("onboarding:team.cancel")}
                 </button>
                 <button
                   onClick={handleImport}
@@ -1042,8 +1205,8 @@ function TeamBuildStep({
                   className="inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium text-white transition-all disabled:opacity-40"
                   style={{ background: WEB.accent }}
                 >
-                  {importBusy ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowRight className="size-3.5" />}
-                  Import
+                  {importBusy ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowRight className="size-3.5 rtl:rotate-180" />}
+                  {t("onboarding:team.importButton")}
                 </button>
               </div>
             </div>
@@ -1056,7 +1219,7 @@ function TeamBuildStep({
         <div className="fixed inset-0 z-50 flex flex-col" style={{ background: WEB.bg }}>
           <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: `1px solid ${WEB.border}` }}>
             <h2 className="font-logo text-xl italic" style={{ color: WEB.text }}>
-              Browse cabinets
+              {t("onboarding:team.browseCabinets")}
             </h2>
             <button
               onClick={() => setRegistryOpen(false)}
@@ -1092,7 +1255,7 @@ function TeamBuildStep({
           className="text-[11px] font-semibold uppercase tracking-wider text-center mb-2"
           style={{ color: WEB.textTertiary }}
         >
-          Or pick your agents{" "}
+          {t("onboarding:team.orPickAgents")}{" "}
           <span style={{ color: selectedCount >= maxAgents ? WEB.accent : WEB.textTertiary }}>
             ({selectedCount}/{maxAgents})
           </span>
@@ -1126,7 +1289,7 @@ function TeamBuildStep({
                   className="mb-2 text-[10px] font-semibold uppercase tracking-wider shrink-0"
                   style={{ color: WEB.textTertiary }}
                 >
-                  {label}
+                  {departmentLabelText(label)}
                 </p>
                 <div className="flex flex-col gap-1.5 overflow-y-auto scrollbar-thin pr-1">
                   {agents.map((agent) => {
@@ -1165,7 +1328,7 @@ function TeamBuildStep({
                             className="ml-auto text-[9px] font-medium uppercase tracking-wide shrink-0"
                             style={{ color: WEB.textTertiary }}
                           >
-                            Required
+                            {t("onboarding:team.required")}
                           </span>
                         )}
                       </button>
@@ -1184,8 +1347,8 @@ function TeamBuildStep({
           className="inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-medium transition-colors"
           style={{ color: WEB.textSecondary }}
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back
+          <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+          {t("onboarding:actions.back")}
         </button>
         <button
           onClick={onNext}
@@ -1193,8 +1356,8 @@ function TeamBuildStep({
           className="inline-flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-medium text-white transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
           style={{ background: WEB.accent }}
         >
-          Next
-          <ArrowRight className="w-3.5 h-3.5" />
+          {t("onboarding:actions.next")}
+          <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
         </button>
       </div>
     </div>
@@ -1401,67 +1564,48 @@ function AgentChatPreview({
     if (!lead) return [];
 
     const script: { agent: SuggestedAgent; text: string }[] = [
-      { agent: lead, text: config.greetingTemplate(homeName, workspaceName) },
+      {
+        agent: lead,
+        text: i18n.t(`onboarding:demo.greeting.${roomType}`, {
+          defaultValue: config.greetingTemplate(homeName, workspaceName),
+          workspace: workspaceName,
+          home: homeName,
+        }),
+      },
     ];
 
-    const roomReplies: Record<RoomType, string[]> = {
-      office: [
-        "On it. I'll have a landscape overview ready by end of day.",
-        "Already drafting a plan. I'll share it in #content shortly.",
-        "Setting up the foundational workflows now. Looking good so far.",
-      ],
-      study: [
-        "I'll triage the inbox and surface what needs you.",
-        "Calendar looks clear until 3pm — good window for writing.",
-        "I've linked three new notes to the 'Daily' index already.",
-      ],
-      lab: [
-        "Pulling the latest paper on this now — draft summary in an hour.",
-        "I'll sync the bibliography after this and flag duplicates.",
-        "Lecture outline for Thursday is almost ready for review.",
-      ],
-      "family-room": [
-        "Schedule looks clear after 4. Flagging overlapping drop-offs.",
-        "Menu drafted for the week — grocery list is ready to review.",
-        "Kids' activities synced. DnD night is still on for Friday.",
-      ],
-      blank: [
-        "Got it. Ready whenever you are.",
-        "Standing by.",
-        "I'll wait for direction.",
-      ],
-    };
-
-    const replies = roomReplies[roomType];
-
-    const topics: Record<RoomType, string[]> = {
-      office: ["competitor research", "the content calendar", "the launch plan"],
-      study: ["today's inbox triage", "this week's writing", "my reading list"],
-      lab: ["the lit review", "Thursday's lecture prep", "the references list"],
-      "family-room": ["today's schedule", "the meal plan", "the kids' activities"],
-      blank: ["the first thing", "whatever's next", "the open question"],
-    };
-    const topicList = topics[roomType];
-
     others.slice(0, 3).forEach((other, idx) => {
-      const topic = topicList[idx] || "what's next";
-      script.push({ agent: lead, text: `${other.name}, can you take on ${topic}?` });
-      if (replies[idx]) {
-        script.push({ agent: other, text: replies[idx] });
+      const topic = i18n.t(`onboarding:demo.${roomType}.topics.${idx}`, {
+        defaultValue: i18n.t("onboarding:demo.fallbackTopic", "what's next"),
+      });
+      script.push({
+        agent: lead,
+        text: i18n.t("onboarding:demo.assign", {
+          defaultValue: `${other.name}, can you take on ${topic}?`,
+          name: other.name,
+          topic,
+        }),
+      });
+      const reply = i18n.t(`onboarding:demo.${roomType}.replies.${idx}`, {
+        defaultValue: "",
+      });
+      if (reply) {
+        script.push({ agent: other, text: reply });
       }
     });
 
-    const closing: Record<RoomType, string> = {
-      office: "Great energy everyone. Let's make this a strong first week.",
-      study: "Good. Ping me when anything needs me — otherwise I'll stay out of your way.",
-      lab: "Keep me posted. I'll review whatever you push by end of day.",
-      "family-room": "Thanks all. Ping me if anything shifts during the day.",
-      blank: "Whenever you're ready, tell us what to do.",
-    };
-    script.push({ agent: lead, text: closing[roomType] });
+    script.push({
+      agent: lead,
+      text: i18n.t(`onboarding:demo.${roomType}.closing`, ""),
+    });
 
     return script;
-  }, [agents, workspaceName, homeName, roomType]);
+    // i18n.language is intentional: re-localize the demo when the language
+    // changes. eslint's exhaustive-deps treats it as an "outer scope value",
+    // but the parent (useLocale) re-renders AgentChatPreview on locale change,
+    // so this dep correctly recomputes the script with the new translations.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agents, workspaceName, homeName, roomType, i18n.language]);
 
   useEffect(() => {
     if (visibleCount >= messages.length) return;
@@ -1565,7 +1709,7 @@ const STEP_NAMES: Record<number, string> = {
 };
 
 export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
-  const { t, locale, dir } = useLocale();
+  const { t, locale, dir, setLocale } = useLocale();
   const welcomeParagraph = t("onboarding:welcome.paragraph");
   const [step, setStep] = useState(0);
 
@@ -1573,6 +1717,28 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     const stepName = STEP_NAMES[step] ?? `step-${step}`;
     sendTelemetry("onboarding.step", { step: stepName });
   }, [step]);
+
+  // First-run language: match the OS keyboard / system language to a
+  // shipped locale so onboarding is localized from screen 0. Only when the
+  // user hasn't already chosen one — an explicit pick (this run via the
+  // language button, or a prior run) always wins. Runs once; the in-flight
+  // re-check guards against the async detection stomping a manual choice
+  // made while it was resolving.
+  const autoLocaleRan = useRef(false);
+  useEffect(() => {
+    if (autoLocaleRan.current) return;
+    autoLocaleRan.current = true;
+    if (hasExplicitLocale()) return;
+    let cancelled = false;
+    void detectSystemLocale().then((detected) => {
+      if (cancelled || !detected || hasExplicitLocale()) return;
+      setLocale(detected);
+      sendTelemetry("onboarding.locale_autodetected", { locale: detected });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [setLocale]);
 
   // Cabinet Cloud waitlist (replaces Tally form). View event fires when the
   // cloud step is reached; start fires on first input; submit fires on success.
@@ -1922,22 +2088,18 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   const communitySteps: CommunityStepConfig[] = [
     {
       eyebrow: "GitHub",
-      title: "Help the Cabinet community grow",
-      description:
-        "A GitHub star helps more people discover Cabinet and join the community.",
-      aside:
-        "Cabinet is open source. If you like the vision, help us spread the word.",
-      nextLabel: "Next",
+      title: t("onboarding:github.title"),
+      description: t("onboarding:github.description"),
+      aside: t("onboarding:github.aside"),
+      nextLabel: t("onboarding:actions.next"),
       cards: [],
     },
     {
       eyebrow: "Discord",
-      title: "Discord is where the good weirdness happens.",
-      description:
-        "This is where feedback turns into features, screenshots turn into debates, and somebody usually finds the edge case before it finds you.",
-      aside:
-        "If you want new features first and prefer 'come chat' over 'please submit a ticket,' this is your room.",
-      nextLabel: "Next",
+      title: t("onboarding:discord.title"),
+      description: t("onboarding:discord.description"),
+      aside: t("onboarding:discord.aside"),
+      nextLabel: t("onboarding:actions.next"),
       cards: [
         {
           title: "Join the Discord",
@@ -1960,11 +2122,9 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     },
     {
       eyebrow: "Cabinet Cloud",
-      title: "Your Cabinet, anywhere. Your AI team, always on.",
-      description:
-        "Open your Cabinet from any device while your AI agents keep working — drafting, researching, organizing — even when your laptop is closed.",
-      aside:
-        "Cabinet Cloud is coming soon. Same product, none of the self-hosting plumbing.",
+      title: t("onboarding:cloud.title"),
+      description: t("onboarding:cloud.description"),
+      aside: t("onboarding:cloud.aside"),
       cards: [
         {
           title: "Connect from anywhere",
@@ -1992,7 +2152,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   const isGitHubCommunityStep = communityStep?.eyebrow === "GitHub";
   const launchDisabled = launching || selectedAgentCount === 0;
   const finalLaunchDisabled = launchDisabled || !disclaimerAccepted;
-  const starsLabel = `${formatGithubStars(githubStars)} GitHub stars`;
+  const starsLabel = t("onboarding:github.starsLabel", { stars: formatGithubStars(githubStars) });
 
   /* ─── Shared inline styles (website tokens) ─── */
   const inputStyle: React.CSSProperties = {
@@ -2013,6 +2173,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
       className="relative min-h-screen overflow-hidden"
       style={{ background: WEB.bg, color: WEB.text }}
     >
+      <WizardLanguagePicker />
       {step === STEP_WELCOME_HOME && (
         <div className="pointer-events-none absolute inset-0">
           <HomeBlueprintBackground
@@ -2103,7 +2264,10 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                     className="wh-item font-logo text-2xl tracking-tight italic"
                     style={{ ["--wh-d" as string]: "4.6s" } as React.CSSProperties}
                   >
-                    Welcome <span style={{ color: WEB.accent }}>home</span>
+                    <Trans
+                      i18nKey="onboarding:welcome.heading"
+                      components={{ accent: <span style={{ color: WEB.accent }} /> }}
+                    />
                   </h1>
                   {/* Typewriter paragraph — reserves its full final height via a
                       transparent clone of the remaining text so the layout
@@ -2133,7 +2297,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                   style={{ ["--wh-d" as string]: "5.0s" } as React.CSSProperties}
                 >
                   <label className="text-sm font-medium" style={{ color: WEB.text }}>
-                    What&apos;s your name?
+                    {t("onboarding:welcome.namePrompt")}
                   </label>
                   <input
                     value={answers.name}
@@ -2159,8 +2323,8 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                     className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors"
                     style={{ color: WEB.textSecondary }}
                   >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    Back
+                    <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+                    {t("onboarding:actions.back")}
                   </button>
                   <button
                     onClick={() => setStep(STEP_ROOM_SETUP)}
@@ -2168,8 +2332,8 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                     className="inline-flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-medium text-white transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
                     style={{ background: WEB.accent }}
                   >
-                    Next
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    {t("onboarding:actions.next")}
+                    <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
                   </button>
                 </div>
               </div>
@@ -2181,10 +2345,13 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
             <div className="mx-auto flex max-w-4xl flex-col gap-7 animate-in fade-in duration-300">
               <div className="text-center space-y-2">
                 <h1 className="font-logo text-2xl tracking-tight italic">
-                  Pick a <span style={{ color: WEB.accent }}>room</span>
+                  <Trans
+                    i18nKey="onboarding:roomSetup.heading"
+                    components={{ accent: <span style={{ color: WEB.accent }} /> }}
+                  />
                 </h1>
                 <p className="text-sm leading-relaxed" style={{ color: WEB.textSecondary }}>
-                  What&apos;s this cabinet for? Each room comes with its own AI team.
+                  {t("onboarding:roomSetup.subtitle")}
                 </p>
               </div>
 
@@ -2224,17 +2391,17 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                       />
                       <div className="relative space-y-1">
                         <p className="text-sm font-semibold" style={{ color: WEB.text }}>
-                          {room.label}
+                          {roomText(id, "label", room.label)}
                         </p>
                         <p className="text-[11px] leading-relaxed" style={{ color: WEB.textSecondary }}>
-                          {room.tagline}
+                          {roomText(id, "tagline", room.tagline)}
                         </p>
                       </div>
                       <div
                         className="relative mt-auto flex flex-wrap items-center gap-1 pt-2"
                         style={{ borderTop: `1px solid ${WEB.borderLight}` }}
                       >
-                        {room.exampleAgents.slice(0, 2).map((ex) => (
+                        {room.exampleAgents.slice(0, 2).map((ex, i) => (
                           <span
                             key={ex}
                             className="text-[10px] font-medium px-2 py-0.5 rounded-full"
@@ -2243,7 +2410,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                               color: WEB.textSecondary,
                             }}
                           >
-                            {ex}
+                            {roomExampleAgent(id, i, ex)}
                           </span>
                         ))}
                       </div>
@@ -2259,7 +2426,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
               >
                 <div className="space-y-2">
                   <label className="text-sm font-medium" style={{ color: WEB.text }}>
-                    {activeRoom.workspaceLabel}
+                    {roomText(answers.roomType, "workspaceLabel", activeRoom.workspaceLabel)}
                   </label>
                   <input
                     value={answers.workspaceName}
@@ -2272,14 +2439,14 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                         descriptionInputRef.current?.focus();
                       }
                     }}
-                    placeholder={activeRoom.workspacePlaceholder}
+                    placeholder={roomText(answers.roomType, "workspacePlaceholder", activeRoom.workspacePlaceholder)}
                     style={inputStyle}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium" style={{ color: WEB.text }}>
-                    {activeRoom.descriptionLabel}
+                    {roomText(answers.roomType, "descriptionLabel", activeRoom.descriptionLabel)}
                   </label>
                   <input
                     ref={descriptionInputRef}
@@ -2293,7 +2460,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                         void goToTeamSuggestion();
                       }
                     }}
-                    placeholder={activeRoom.descriptionPlaceholder}
+                    placeholder={roomText(answers.roomType, "descriptionPlaceholder", activeRoom.descriptionPlaceholder)}
                     style={inputStyle}
                   />
                 </div>
@@ -2306,8 +2473,8 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                   className="inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-medium transition-colors"
                   style={{ color: WEB.textSecondary }}
                 >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  Back
+                  <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+                  {t("onboarding:actions.back")}
                 </button>
                 <button
                   onClick={goToTeamSuggestion}
@@ -2315,8 +2482,8 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                   className="inline-flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-medium text-white transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
                   style={{ background: WEB.accent }}
                 >
-                  Next
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  {t("onboarding:actions.next")}
+                  <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
                 </button>
               </div>
             </div>
@@ -2345,10 +2512,10 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
             <div className="mx-auto flex max-w-xl flex-col gap-6 animate-in fade-in duration-300">
               <div className="text-center space-y-2">
                 <h1 className="font-logo text-2xl tracking-tight italic">
-                  Agent Provider
+                  {t("onboarding:provider.heading")}
                 </h1>
                 <p className="text-sm leading-relaxed" style={{ color: WEB.textSecondary }}>
-                  Cabinet needs an AI CLI to power your agents.
+                  {t("onboarding:provider.subtitle")}
                 </p>
               </div>
 
@@ -2476,10 +2643,10 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                               role="button"
                             >
                               {isReady
-                                ? "Guide"
+                                ? t("onboarding:provider.guide")
                                 : isInstalled
-                                  ? "Log in"
-                                  : "Install"}
+                                  ? t("onboarding:provider.logIn")
+                                  : t("onboarding:provider.install")}
                               <ChevronDown
                                 className="size-3 transition-transform"
                                 style={{
@@ -2501,14 +2668,14 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                     style={{ background: WEB.bgWarm, border: `1px solid ${WEB.borderLight}`, color: WEB.accent }}
                   >
                     <RefreshCw className="size-3" />
-                    Re-check providers
+                    {t("onboarding:provider.recheck")}
                   </button>
 
                   {/* Install / verify guide drawer */}
                   {expandedProviderInfo && (() => {
                     const p = expandedProviderInfo;
                     const setupSteps: { title: string; detail: string; cmd?: string; openTerminal?: boolean; link?: { label: string; url: string } }[] = [
-                      { title: "Open a terminal", detail: "You'll need a terminal to run the next steps.", openTerminal: true },
+                      { title: t("onboarding:provider.openTerminalTitle"), detail: t("onboarding:provider.openTerminalDetail"), openTerminal: true },
                       ...((p.installSteps || []).map((step) => ({
                         title: step.title,
                         detail: step.detail,
@@ -2540,7 +2707,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                               <ProviderGlyph icon={p.icon} className="size-3.5" />
                             </div>
                             <p className="text-[13px] font-semibold" style={{ color: WEB.text }}>
-                              {p.name} setup
+                              {t("onboarding:provider.setupTitle", { name: p.name })}
                             </p>
                           </div>
                           <button
@@ -2548,7 +2715,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                             className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium"
                             style={{ color: WEB.textTertiary }}
                           >
-                            Close
+                            {t("onboarding:provider.close")}
                           </button>
                         </div>
 
@@ -2606,14 +2773,14 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       fetch("/api/terminal/open", { method: "POST" }).catch(() => {
-                                        showError("Could not open terminal automatically. Open your system terminal manually.");
+                                        showError(t("onboarding:provider.openTerminalError"));
                                       });
                                     }}
                                     className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 mt-1.5 text-[11px] font-medium transition-all hover:-translate-y-0.5"
                                     style={{ background: "#1e1e1e", color: "#d4d4d4" }}
                                   >
                                     <Terminal className="size-3" />
-                                    Open terminal
+                                    {t("onboarding:provider.openTerminalButton")}
                                   </button>
                                 )}
                                 {setupStep.link && (
@@ -2649,10 +2816,10 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                               <CheckCircle2 className="size-3" />
                             )}
                             {verifyState.phase === "running"
-                              ? "Verifying…"
+                              ? t("onboarding:provider.verifying")
                               : verifyState.phase === "done"
-                                ? "Re-run verify"
-                                : "Run verify"}
+                                ? t("onboarding:provider.rerunVerify")
+                                : t("onboarding:provider.runVerify")}
                           </button>
                           {verifyMeta && (
                             <span
@@ -2666,10 +2833,11 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                             verifyResult.status !== "pass" &&
                             verifyResult.failedStepTitle && (
                               <span className="text-[11px]" style={{ color: WEB.textSecondary }}>
-                                Failed at step:{" "}
-                                <strong style={{ color: WEB.text }}>
-                                  {verifyResult.failedStepTitle}
-                                </strong>
+                                <Trans
+                                  i18nKey="onboarding:provider.failedAtStep"
+                                  values={{ step: verifyResult.failedStepTitle }}
+                                  components={{ strong: <strong style={{ color: WEB.text }} /> }}
+                                />
                               </span>
                             )}
                           {verifyState.phase === "error" && (
@@ -2685,7 +2853,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                         )}
 
                         <p className="text-[11px]" style={{ color: WEB.textTertiary }}>
-                          Verify runs the provider's headless prompt end-to-end and classifies any failure so you know which step to revisit.
+                          {t("onboarding:provider.verifyExplanation")}
                         </p>
                       </div>
                     );
@@ -2700,7 +2868,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
               {/* Coming soon providers */}
               <div className="space-y-2">
                 <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: WEB.textTertiary }}>
-                  Coming soon
+                  {t("onboarding:provider.comingSoon")}
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {[
@@ -2732,7 +2900,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                           {p.name}
                         </p>
                         <p className="text-[10px]" style={{ color: WEB.textTertiary }}>
-                          {p.type} agent
+                          {t("onboarding:provider.agentType", { type: p.type })}
                         </p>
                       </div>
                     </div>
@@ -2746,16 +2914,16 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                   className="inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-medium transition-colors"
                   style={{ color: WEB.textSecondary }}
                 >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  Back
+                  <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+                  {t("onboarding:actions.back")}
                 </button>
                 <button
                   onClick={() => setStep(COMMUNITY_START_STEP)}
                   className="inline-flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-medium text-white transition-all hover:-translate-y-0.5"
                   style={{ background: WEB.accent }}
                 >
-                  {anyProviderReady ? "Next" : "Skip for now"}
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  {anyProviderReady ? t("onboarding:actions.next") : t("onboarding:provider.skipForNow")}
+                  <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
                 </button>
               </div>
             </div>
@@ -2882,7 +3050,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                         </span>
                       </span>
                       <span className="hidden shrink-0 rounded-full px-3 py-1 text-sm font-semibold sm:inline-flex" style={{ background: "#D8D4F7", color: "#5865F2" }}>
-                        Join
+                        {t("onboarding:discord.joinBadge")}
                       </span>
                     </a>
                   </div>
@@ -2900,7 +3068,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                         </span>
                         <div className="flex min-w-0 flex-col items-start gap-0.5 text-left">
                           <span className="truncate text-base font-semibold sm:text-lg" style={{ color: WEB.text }}>{t("tinyExtras:joinWaitlist")}</span>
-                          <span className="text-sm" style={{ color: WEB.textSecondary }}>Connect from anywhere. Your AI team works 24/7.</span>
+                          <span className="text-sm" style={{ color: WEB.textSecondary }}>{t("onboarding:cloud.waitlistSubtitle")}</span>
                         </div>
                       </div>
                       {cloudStatus === "success" || cloudStatus === "already" ? (
@@ -2911,8 +3079,8 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                           <CheckCircle2 className="size-4 shrink-0" style={{ color: WEB.accent }} />
                           <span>
                             {cloudStatus === "already"
-                              ? "You're already on the list — we'll be in touch."
-                              : "You're on the list. We'll email you when Cabinet Cloud opens up."}
+                              ? t("onboarding:cloud.alreadyOnList")
+                              : t("onboarding:cloud.onList")}
                           </span>
                         </div>
                       ) : (
@@ -2949,12 +3117,12 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                             {cloudStatus === "submitting" ? (
                               <>
                                 <Loader2 className="size-4 animate-spin" />
-                                Sending…
+                                {t("onboarding:cloud.sending")}
                               </>
                             ) : (
                               <>
-                                Join waitlist
-                                <ArrowRight className="size-3.5" />
+                                {t("onboarding:cloud.joinWaitlist")}
+                                <ArrowRight className="size-3.5 rtl:rotate-180" />
                               </>
                             )}
                           </button>
@@ -2962,7 +3130,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                       )}
                       {cloudStatus === "error" && (
                         <div className="text-xs" style={{ color: "#dc2626" }}>
-                          Something went wrong. Check the email and try again.
+                          {t("onboarding:cloud.error")}
                         </div>
                       )}
                     </div>
@@ -2976,8 +3144,8 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                   className="inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-medium transition-colors"
                   style={{ color: WEB.textSecondary }}
                 >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  Back
+                  <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+                  {t("onboarding:actions.back")}
                 </button>
                 {step < COMMUNITY_END_STEP ? (
                   <button
@@ -2987,7 +3155,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                     style={{ background: WEB.accent }}
                   >
                     {communityStep.nextLabel}
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
                   </button>
                 ) : (
                   <button
@@ -2995,8 +3163,8 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                     className="inline-flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-medium text-white transition-all hover:-translate-y-0.5"
                     style={{ background: WEB.accent }}
                   >
-                    Next
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    {t("onboarding:actions.next")}
+                    <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
                   </button>
                 )}
               </div>
@@ -3027,13 +3195,13 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                 <div className="p-5 space-y-4 flex-1 overflow-y-auto scrollbar-thin">
                   <div className="space-y-1">
                     <h2 className="font-logo text-xl tracking-tight italic" style={{ color: WEB.text }}>
-                      {answers.workspaceName || "Your Cabinet"}
+                      {answers.workspaceName || t("onboarding:launch.defaultCabinetName")}
                     </h2>
                     <p
                       className="text-[11px] font-semibold uppercase tracking-wider"
                       style={{ color: WEB.textTertiary }}
                     >
-                      {answers.description || "Knowledge base + AI team"}
+                      {answers.description || t("onboarding:launch.defaultDescription")}
                     </p>
                   </div>
 
@@ -3101,7 +3269,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                 }}
               >
                 <p className="text-[13px] font-semibold" style={{ color: WEB.text }}>
-                  Before you launch
+                  {t("onboarding:launch.beforeYouLaunch")}
                 </p>
                 <ul className="space-y-2">
                   <li className="flex gap-3">
@@ -3111,19 +3279,18 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                       aria-hidden
                     />
                     <span style={{ color: WEB.textSecondary }}>
-                      <strong className="font-medium" style={{ color: WEB.text }}>
-                        Agents run with full access.
-                      </strong>{" "}
-                      Cabinet uses{" "}
-                      <code
-                        className="rounded px-1 py-0.5 text-[11px]"
-                        style={{ background: WEB.bgWarm, color: WEB.text }}
-                      >
-                        --dangerously-skip-permissions
-                      </code>{" "}
-                      (Claude Code) and equivalent flags in other providers. This is identical
-                      to running these CLI tools from your own terminal. Any MCP servers or
-                      tools you&apos;ve configured may be invoked automatically by agents.
+                      <Trans
+                        i18nKey="onboarding:launch.disclaimerAccess"
+                        components={{
+                          strong: <strong className="font-medium" style={{ color: WEB.text }} />,
+                          flag: (
+                            <code
+                              className="rounded px-1 py-0.5 text-[11px]"
+                              style={{ background: WEB.bgWarm, color: WEB.text }}
+                            />
+                          ),
+                        }}
+                      />
                     </span>
                   </li>
                   <li className="flex gap-3">
@@ -3133,12 +3300,12 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                       aria-hidden
                     />
                     <span style={{ color: WEB.textSecondary }}>
-                      <strong className="font-medium" style={{ color: WEB.text }}>
-                        Back up your data regularly.
-                      </strong>{" "}
-                      Agents can read, write, and delete files across your KB and linked repos.
-                      Cabinet is not responsible for data loss. You are responsible for the AI
-                      providers you choose and their terms of service.
+                      <Trans
+                        i18nKey="onboarding:launch.disclaimerBackup"
+                        components={{
+                          strong: <strong className="font-medium" style={{ color: WEB.text }} />,
+                        }}
+                      />
                     </span>
                   </li>
                   <li className="flex gap-3">
@@ -3148,10 +3315,12 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                       aria-hidden
                     />
                     <span style={{ color: WEB.textSecondary }}>
-                      <strong className="font-medium" style={{ color: WEB.text }}>
-                        Beta software. Things may break.
-                      </strong>{" "}
-                      We ship fast. Breaking changes can land without notice.
+                      <Trans
+                        i18nKey="onboarding:launch.disclaimerBeta"
+                        components={{
+                          strong: <strong className="font-medium" style={{ color: WEB.text }} />,
+                        }}
+                      />
                     </span>
                   </li>
                 </ul>
@@ -3174,37 +3343,38 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                   className="text-[11px]"
                   style={{ color: WEB.textTertiary }}
                 >
-                  By continuing you agree to our{" "}
-                  <a
-                    href="https://runcabinet.com/terms"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline underline-offset-2"
-                    style={{ color: WEB.textSecondary }}
-                  >
-                    Terms
-                  </a>{" "}
-                  and{" "}
-                  <a
-                    href="https://runcabinet.com/privacy"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline underline-offset-2"
-                    style={{ color: WEB.textSecondary }}
-                  >
-                    Privacy
-                  </a>
-                  . Cabinet is an{" "}
-                  <a
-                    href="https://github.com/hilash/cabinet"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline underline-offset-2"
-                    style={{ color: WEB.textSecondary }}
-                  >
-                    open-source project
-                  </a>
-                  .
+                  <Trans
+                    i18nKey="onboarding:launch.legalNotice"
+                    components={{
+                      terms: (
+                        <a
+                          href="https://runcabinet.com/terms"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline underline-offset-2"
+                          style={{ color: WEB.textSecondary }}
+                        />
+                      ),
+                      privacy: (
+                        <a
+                          href="https://runcabinet.com/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline underline-offset-2"
+                          style={{ color: WEB.textSecondary }}
+                        />
+                      ),
+                      oss: (
+                        <a
+                          href="https://github.com/hilash/cabinet"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline underline-offset-2"
+                          style={{ color: WEB.textSecondary }}
+                        />
+                      ),
+                    }}
+                  />
                 </p>
               </div>
 
@@ -3214,8 +3384,8 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                   className="inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-medium transition-colors"
                   style={{ color: WEB.textSecondary }}
                 >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  Back
+                  <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+                  {t("onboarding:actions.back")}
                 </button>
                 <button
                   onClick={launch}
@@ -3226,12 +3396,12 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                   {launching ? (
                     <>
                       <Loader2 className="animate-spin w-4 h-4" />
-                      Setting up...
+                      {t("onboarding:launch.settingUp")}
                     </>
                   ) : (
                     <>
                       <Rocket className="w-4 h-4" />
-                      Launch Cabinet
+                      {t("onboarding:launch.launchCabinet")}
                     </>
                   )}
                 </button>

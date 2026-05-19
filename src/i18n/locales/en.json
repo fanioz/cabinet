@@ -61,7 +61,8 @@
       "pickAnAgent": "Pick an agent",
       "dismiss": "Dismiss",
       "lockedHeartbeatTip": "This agent is stopped. Start it on the Agents tab to enable the heartbeat.",
-      "lockedRoutineTip": "This agent is stopped. Start it on the Agents tab to enable its routines."
+      "lockedRoutineTip": "This agent is stopped. Start it on the Agents tab to enable its routines.",
+      "avatar": "workspace.avatar"
     },
     "detail": {
       "clickToTurnOff": "Click to turn off.",
@@ -1022,7 +1023,9 @@
       "getStarted": "Get started"
     },
     "welcome": {
-      "paragraph": "Your Home is yours. Inside it, you'll set up rooms for different parts of your life: work, second brain, research, family. And every room has cabinets: your notes, your files, and an AI team quietly getting things done in the background."
+      "paragraph": "Your Home is yours. Inside it, you'll set up rooms for different parts of your life: work, second brain, research, family. And every room has cabinets: your notes, your files, and an AI team quietly getting things done in the background.",
+      "namePrompt": "What's your name?",
+      "heading": "Welcome <accent>home</accent>"
     },
     "welcomeBack": {
       "heading": "Welcome back",
@@ -1051,6 +1054,280 @@
       "finish": "Finish",
       "complete": "Complete setup",
       "copyToClipboard": "Copy to clipboard"
+    },
+    "cabinetCreated": {
+      "continue": "Continue setup",
+      "heading": "Your cabinet has been created",
+      "subtitle": "Everything is set up and ready to go.",
+      "agentsReady_one": "{{count}} agent ready to work",
+      "agentsReady_other": "{{count}} agents ready to work",
+      "scheduledJobs_one": "{{count}} scheduled job",
+      "scheduledJobs_other": "{{count}} scheduled jobs",
+      "subCabinets_one": "{{count}} sub-cabinet",
+      "subCabinets_other": "{{count}} sub-cabinets",
+      "agentsReady": "{{count}} agents ready to work",
+      "scheduledJobs": "{{count}} scheduled jobs",
+      "subCabinets": "{{count}} sub-cabinets"
+    },
+    "cloud": {
+      "alreadyOnList": "You're already on the list — we'll be in touch.",
+      "aside": "Cabinet Cloud is coming soon. Same product, none of the self-hosting plumbing.",
+      "description": "Open your Cabinet from any device while your AI agents keep working — drafting, researching, organizing — even when your laptop is closed.",
+      "error": "Something went wrong. Check the email and try again.",
+      "joinWaitlist": "Join waitlist",
+      "onList": "You're on the list. We'll email you when Cabinet Cloud opens up.",
+      "sending": "Sending…",
+      "title": "Your Cabinet, anywhere. Your AI team, always on.",
+      "waitlistSubtitle": "Connect from anywhere. Your AI team works 24/7."
+    },
+    "discord": {
+      "aside": "If you want new features first and prefer 'come chat' over 'please submit a ticket,' this is your room.",
+      "description": "This is where feedback turns into features, screenshots turn into debates, and somebody usually finds the edge case before it finds you.",
+      "joinBadge": "Join",
+      "title": "Discord is where the good weirdness happens."
+    },
+    "github": {
+      "aside": "Cabinet is open source. If you like the vision, help us spread the word.",
+      "description": "A GitHub star helps more people discover Cabinet and join the community.",
+      "starsLabel": "{{stars}} GitHub stars",
+      "title": "Help the Cabinet community grow"
+    },
+    "launch": {
+      "beforeYouLaunch": "Before you launch",
+      "defaultCabinetName": "Your Cabinet",
+      "defaultDescription": "Knowledge base + AI team",
+      "launchCabinet": "Launch Cabinet",
+      "settingUp": "Setting up...",
+      "disclaimerAccess": "<strong>Agents run with full access.</strong> Cabinet uses <flag>--dangerously-skip-permissions</flag> (Claude Code) and equivalent flags in other providers. This is identical to running these CLI tools from your own terminal. Any MCP servers or tools you've configured may be invoked automatically by agents.",
+      "disclaimerBackup": "<strong>Back up your data regularly.</strong> Agents can read, write, and delete files across your KB and linked repos. Cabinet is not responsible for data loss. You are responsible for the AI providers you choose and their terms of service.",
+      "disclaimerBeta": "<strong>Beta software. Things may break.</strong> We ship fast. Breaking changes can land without notice.",
+      "legalNotice": "By continuing you agree to our <terms>Terms</terms> and <privacy>Privacy</privacy>. Cabinet is an <oss>open-source project</oss>."
+    },
+    "provider": {
+      "agentType": "{{type}} agent",
+      "close": "Close",
+      "comingSoon": "Coming soon",
+      "guide": "Guide",
+      "heading": "Agent Provider",
+      "install": "Install",
+      "logIn": "Log in",
+      "openTerminalButton": "Open terminal",
+      "openTerminalDetail": "You'll need a terminal to run the next steps.",
+      "openTerminalError": "Could not open terminal automatically. Open your system terminal manually.",
+      "openTerminalTitle": "Open a terminal",
+      "recheck": "Re-check providers",
+      "rerunVerify": "Re-run verify",
+      "runVerify": "Run verify",
+      "setupTitle": "{{name}} setup",
+      "skipForNow": "Skip for now",
+      "subtitle": "Cabinet needs an AI CLI to power your agents.",
+      "verifyExplanation": "Verify runs the provider's headless prompt end-to-end and classifies any failure so you know which step to revisit.",
+      "verifying": "Verifying…",
+      "failedAtStep": "Failed at step: <strong>{{step}}</strong>"
+    },
+    "roomSetup": {
+      "subtitle": "What's this cabinet for? Each room comes with its own AI team.",
+      "heading": "Pick a <accent>room</accent>"
+    },
+    "rooms": {
+      "office": {
+        "label": "The Office",
+        "tagline": "Run a business, startup, or side project.",
+        "workspaceLabel": "Company or project name",
+        "workspacePlaceholder": "Acme Corp",
+        "descriptionLabel": "What do you do?",
+        "descriptionPlaceholder": "We make a podcast about AI startups",
+        "departmentNoun": "Department",
+        "teamSizeLabel": "Team size",
+        "exampleAgents": {
+          "0": "CEO",
+          "1": "Editor"
+        }
+      },
+      "study": {
+        "label": "Study",
+        "tagline": "Your second brain — writing, notes, personal assistant.",
+        "workspaceLabel": "Name your cabinet",
+        "workspacePlaceholder": "My Study",
+        "descriptionLabel": "What areas of life do you want help with?",
+        "descriptionPlaceholder": "Writing, email triage, calendar, habit tracking",
+        "departmentNoun": "Area",
+        "exampleAgents": {
+          "0": "Assistant",
+          "1": "Librarian"
+        }
+      },
+      "lab": {
+        "label": "Research Lab",
+        "tagline": "Academic work, literature, teaching, thesis.",
+        "workspaceLabel": "Workspace name",
+        "workspacePlaceholder": "Philosophy of Mind",
+        "descriptionLabel": "What's your field or what are you researching?",
+        "descriptionPlaceholder": "Phenomenology, consciousness, teaching Intro to Philosophy",
+        "departmentNoun": "Area",
+        "exampleAgents": {
+          "0": "Research Lead",
+          "1": "Librarian"
+        }
+      },
+      "family-room": {
+        "label": "Family Room",
+        "tagline": "Household, family calendar, meals, kids.",
+        "workspaceLabel": "Household name",
+        "workspacePlaceholder": "The Nguyen Family",
+        "descriptionLabel": "Who lives here and what do you juggle?",
+        "descriptionPlaceholder": "Two parents, three kids, two schools, one dog",
+        "departmentNoun": "Area",
+        "teamSizeLabel": "Household size",
+        "exampleAgents": {
+          "0": "Home Manager",
+          "1": "Planner"
+        }
+      },
+      "blank": {
+        "label": "Blank Room",
+        "tagline": "Nothing yet. Bring your own agents, your own shape.",
+        "workspaceLabel": "Name your cabinet",
+        "workspacePlaceholder": "My Cabinet",
+        "descriptionLabel": "What's it for?",
+        "descriptionPlaceholder": "Anything — leave blank if you're not sure yet",
+        "departmentNoun": "Group",
+        "exampleAgents": {
+          "0": "Your call"
+        }
+      }
+    },
+    "departments": {
+      "leadership": "Leadership",
+      "marketing": "Marketing",
+      "content": "Content",
+      "engineering": "Engineering",
+      "product-and-design": "Product & Design",
+      "business": "Business",
+      "research": "Research",
+      "finance-and-ops": "Finance & Ops",
+      "personal": "Personal",
+      "second-brain": "Second brain",
+      "writing": "Writing",
+      "tools": "Tools",
+      "life-admin": "Life admin",
+      "from-the-office": "From the Office",
+      "writing-and-notes": "Writing & notes",
+      "other": "Other",
+      "household": "Household",
+      "admin": "Admin",
+      "money": "Money",
+      "product": "Product",
+      "design": "Design",
+      "sales": "Sales",
+      "support": "Support",
+      "analytics": "Analytics",
+      "finance": "Finance",
+      "legal": "Legal",
+      "people": "People"
+    },
+    "demo": {
+      "greeting": {
+        "office": "Good morning team! Welcome to {{workspace}}. Let's hit the ground running.",
+        "study": "Morning. Your second brain is online — welcome back to {{home}}.",
+        "lab": "Research desk ready — \"{{workspace}}\". What are we digging into today?",
+        "family-room": "Home HQ booting up — {{home}}. Let's get everyone where they need to be.",
+        "blank": "Blank slate — \"{{workspace}}\". What do you want to build here, {{home}}?"
+      },
+      "assign": "{{name}}, can you take on {{topic}}?",
+      "fallbackTopic": "what's next",
+      "office": {
+        "replies": {
+          "0": "On it. I'll have a landscape overview ready by end of day.",
+          "1": "Already drafting a plan. I'll share it in #content shortly.",
+          "2": "Setting up the foundational workflows now. Looking good so far."
+        },
+        "topics": {
+          "0": "competitor research",
+          "1": "the content calendar",
+          "2": "the launch plan"
+        },
+        "closing": "Great energy everyone. Let's make this a strong first week."
+      },
+      "study": {
+        "replies": {
+          "0": "I'll triage the inbox and surface what needs you.",
+          "1": "Calendar looks clear until 3pm — good window for writing.",
+          "2": "I've linked three new notes to the 'Daily' index already."
+        },
+        "topics": {
+          "0": "today's inbox triage",
+          "1": "this week's writing",
+          "2": "my reading list"
+        },
+        "closing": "Good. Ping me when anything needs me — otherwise I'll stay out of your way."
+      },
+      "lab": {
+        "replies": {
+          "0": "Pulling the latest paper on this now — draft summary in an hour.",
+          "1": "I'll sync the bibliography after this and flag duplicates.",
+          "2": "Lecture outline for Thursday is almost ready for review."
+        },
+        "topics": {
+          "0": "the lit review",
+          "1": "Thursday's lecture prep",
+          "2": "the references list"
+        },
+        "closing": "Keep me posted. I'll review whatever you push by end of day."
+      },
+      "family-room": {
+        "replies": {
+          "0": "Schedule looks clear after 4. Flagging overlapping drop-offs.",
+          "1": "Menu drafted for the week — grocery list is ready to review.",
+          "2": "Kids' activities synced. DnD night is still on for Friday."
+        },
+        "topics": {
+          "0": "today's schedule",
+          "1": "the meal plan",
+          "2": "the kids' activities"
+        },
+        "closing": "Thanks all. Ping me if anything shifts during the day."
+      },
+      "blank": {
+        "replies": {
+          "0": "Got it. Ready whenever you are.",
+          "1": "Standing by.",
+          "2": "I'll wait for direction."
+        },
+        "topics": {
+          "0": "the first thing",
+          "1": "whatever's next",
+          "2": "the open question"
+        },
+        "closing": "Whenever you're ready, tell us what to do."
+      }
+    },
+    "team": {
+      "browseAll": "Browse all",
+      "browseCabinets": "Browse cabinets",
+      "cabinetNameLabel": "Cabinet name",
+      "cancel": "Cancel",
+      "importButton": "Import",
+      "importFailed": "Import failed",
+      "importFailedConnection": "Import failed. Check your connection.",
+      "importTitle": "Import {{name}}",
+      "orPickAgents": "Or pick your agents",
+      "required": "Required",
+      "startFromTemplate": "Start from a template",
+      "subtitle": "Each cabinet is an AI team — agents, tasks, and a shared knowledge base, working together as one.",
+      "heading": "Build <accent>your</accent> team",
+      "agentCount_one": "{{count}} agent",
+      "agentCount_other": "{{count}} agents",
+      "jobCount_one": "{{count}} job",
+      "jobCount_other": "{{count}} jobs",
+      "subCabinetCount_one": "{{count}} sub-cabinet",
+      "subCabinetCount_other": "{{count}} sub-cabinets",
+      "cabinetsImported_one": "{{count}} cabinet imported",
+      "cabinetsImported_other": "{{count}} cabinets imported",
+      "agentCount": "{{count}} agents",
+      "cabinetsImported": "{{count}} cabinets imported",
+      "jobCount": "{{count}} jobs",
+      "subCabinetCount": "{{count}} sub-cabinets"
     }
   },
   "search": {
@@ -1332,7 +1609,14 @@
       "savedAgoSeconds": "{{n}}s ago",
       "savedAgoMinutes": "{{n}}m ago",
       "savedAgoHours": "{{n}}h ago",
-      "savedAgoDays": "{{n}}d ago"
+      "savedAgoDays": "{{n}}d ago",
+      "saveFailedRetry": "Save failed — retry",
+      "savingText": "Saving…",
+      "savedText": "Saved",
+      "editingText": "Editing…",
+      "savedAgo": "Saved · {{ago}}",
+      "word": "word",
+      "words": "words"
     },
     "git": {
       "statusModified": "Modified",
@@ -1364,7 +1648,7 @@
       "allCommitted": "All committed",
       "uncommittedFile": "{{count}} uncommitted file",
       "uncommittedFiles": "{{count}} uncommitted files",
-      "uncommittedFilesAria": "{{count}} uncommitted file{{plural}} — click to see the list",
+      "uncommittedFilesAria": "{{count}} uncommitted file(s) — click to see the list",
       "uncommittedFileTip": "Click to see uncommitted file",
       "uncommittedFilesTip": "Click to see uncommitted files",
       "uncommittedFilesHeading": "{{count}} uncommitted file",
@@ -1382,7 +1666,11 @@
       "syncAriaLabelWithLast": "Pull latest changes from GitHub and refresh. Last synced {{when}}.",
       "terminal": "Terminal",
       "openTerminal": "Open terminal",
-      "newTerminalTab": "New terminal tab"
+      "newTerminalTab": "New terminal tab",
+      "pulling": "Pulling…",
+      "pulled": "Updated from remote",
+      "upToDate": "Up to date",
+      "pullFailed": "Pull failed"
     },
     "update2": {
       "updateAvailable": "Update {{version}} available",
@@ -1392,6 +1680,9 @@
       "dismiss": "Dismiss",
       "close": "Close",
       "openSettings": "Open Settings to review the installed update"
+    },
+    "misc": {
+      "restartToFinishUpdate": "Restart to finish update"
     }
   },
   "tasks": {
@@ -1442,5 +1733,47 @@
     "itemArchived": "{{title}} · archived",
     "itemDefault": "{{title}} · {{when}}",
     "toggleRunning": "{{count}} running — show tasks rail"
+  },
+  "chrome": {
+    "nav": {
+      "home": "Home",
+      "agents": "Agents",
+      "tasks": "Tasks",
+      "ai": "AI",
+      "menu": "Menu",
+      "primaryAriaLabel": "Primary"
+    },
+    "returnTo": {
+      "task": "Task",
+      "tasks": "Tasks",
+      "agent": "Agent",
+      "agents": "Agents",
+      "cabinet": "Cabinet",
+      "home": "Home",
+      "settings": "Settings",
+      "registry": "Registry",
+      "back": "Back",
+      "backTo": "Back to {{label}}"
+    },
+    "theme": {
+      "defaultHeader": "Default",
+      "dark": "Dark",
+      "darkThemes": "Dark Themes",
+      "lightThemes": "Light Themes"
+    },
+    "update": {
+      "restartTitle": "Restart Cabinet to finish updating",
+      "availableTitle": "Cabinet {{version}} is available",
+      "updatesTitle": "Cabinet updates",
+      "description": "Cabinet checks for releases automatically. While the product is still experimental, keep a copy of your data before installing updates.",
+      "later": "Later",
+      "releaseNotes": "Release notes"
+    },
+    "daemon": {
+      "fixHintElectron": "Quit and relaunch Cabinet to restart the agent daemon.",
+      "fixHintDev": "Run `npm run dev:daemon` (or restart `npm run dev:all`) to bring the agent daemon back up.",
+      "notResponding": "The agent daemon isn't responding.",
+      "willFail": "Agents, jobs, and AI requests will fail until it's back. {{fixHint}}"
+    }
   }
 }
