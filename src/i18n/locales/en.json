@@ -756,7 +756,9 @@
     "noSkills": "No skills yet."
   },
   "taskDetail": {
-    "close": "Close (Esc)"
+    "close": "Close (Esc)",
+    "muteTask": "Mute this task — its done runs go straight to Archive",
+    "unmuteTask": "Unmute this task — its done runs resurface in Just Finished"
   },
   "rowActionsPlus": {
     "edit": "Edit",
