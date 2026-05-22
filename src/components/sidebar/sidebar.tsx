@@ -14,7 +14,6 @@ import {
   RefreshCw,
   Settings,
   UserPlus,
-  Home,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -206,7 +205,6 @@ export function Sidebar() {
                   {brandWord}
                 </span>
               )}
-              <Home className="size-3.5 not-italic opacity-0 group-hover:opacity-50 transition-opacity shrink-0" />
             </button>
             <NavArrows />
           </div>
