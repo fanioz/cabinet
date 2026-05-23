@@ -35,6 +35,10 @@ interface OnboardingRequest {
     role?: string;
     instructions?: string;
     provider?: string;
+    /** Cron expression for the agent's heartbeat (empty/omitted = none). */
+    heartbeat?: string;
+    /** Whether the heartbeat is active (defaults to false). */
+    heartbeatEnabled?: boolean;
   };
   locale?: string;
 }
@@ -210,8 +214,8 @@ export async function POST(req: NextRequest) {
           type: "specialist",
           role: (firstAgent.role || "").trim(),
           provider: firstAgent.provider?.trim() || "claude-code",
-          heartbeat: "",
-          heartbeatEnabled: false,
+          heartbeat: firstAgent.heartbeat?.trim() || "",
+          heartbeatEnabled: firstAgent.heartbeatEnabled === true,
           budget: 100,
           active: true,
           workdir: "/data",

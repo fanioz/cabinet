@@ -23,24 +23,18 @@ import {
   Terminal,
   Zap,
   FileText,
-  Github,
-  MessageSquare,
-  Plug,
-  Puzzle,
+  HeartPulse,
 } from "lucide-react";
 import { HomeBlueprintBackground } from "@/components/onboarding/home-blueprint-background";
 import { isAgentProviderSelectable } from "@/lib/agents/provider-filters";
 import { ProviderGlyph } from "@/components/agents/provider-glyph";
 import type { ProviderInfo } from "@/types/agents";
 import { showError } from "@/lib/ui/toast";
-import {
-  ROOMS,
-  ROOM_TYPES,
-  type RoomType,
-} from "@/lib/onboarding/rooms";
+import { ROOMS, type RoomType } from "@/lib/onboarding/rooms";
 import { slugifyPageName } from "@/lib/markdown/wiki-links";
 import { MockupSidebar, type MockupTab } from "./tour/mockup-sidebar";
 import { CABINET_SHOWCASES, ShowcaseWindow } from "./cabinet-showcases";
+import { Switch } from "@/components/ui/switch";
 import { getSuggestedProviderEffort } from "@/lib/agents/runtime-options";
 import { sendTelemetry } from "@/lib/telemetry/browser";
 import {
@@ -150,19 +144,17 @@ const WELCOME_TYPE_CHAR_MS = 32;
 
 // Step indices after the compress pass:
 // 0 intro · 1 welcome-home · 2 what-is-cabinet · 3 room-setup (pick + name + describe) ·
-// 4 provider (connect AI) · 5 team (configure first agent) · 6 access · 7 heartbeat ·
-// 8 first-task · 9 github · 10 discord · 11 cloud · 12 launch
-const COMMUNITY_START_STEP = 9;
-const COMMUNITY_END_STEP = 11;
-const STEP_COUNT = 13;
+// 4 provider (connect AI) · 5 team (configure first agent + heartbeat) ·
+// 6 first-task · 7 github · 8 discord · 9 cloud · 10 launch
+const COMMUNITY_START_STEP = 7;
+const COMMUNITY_END_STEP = 9;
+const STEP_COUNT = 11;
 const STEP_WELCOME_HOME = 1;
 const STEP_WHAT_IS_CABINET = 2;
 const STEP_ROOM_SETUP = 3;
 const STEP_PROVIDER = 4;
 const STEP_TEAM = 5;
-const STEP_ACCESS = 6;
-const STEP_HEARTBEAT = 7;
-const STEP_TASK = 8;
+const STEP_TASK = 6;
 
 /* ─── Colors from runcabinet.com ─── */
 const WEB = {
@@ -264,19 +256,6 @@ function CommunityCardTile({ card }: { card: CommunityCard }) {
 // Agent pre-check + mandatory-lock logic is now room-aware — see getKeywordChecks
 // and getAlwaysChecked below. The old KEYWORD_CHECKS / ALWAYS_CHECKED constants
 // were per-room-type "office" defaults.
-
-// i18n helpers for the data-module strings (rooms.ts / DEPARTMENT_ORDERS).
-// The English values in ROOMS / *_ORDER stay the structural source of truth
-// (and server fallback); these look up the localized copy at render time,
-// with the English string as the i18next defaultValue so a missing key never
-// blanks the UI.
-function roomText(id: RoomType, field: string, fallback: string): string {
-  return i18n.t(`onboarding:rooms.${id}.${field}`, fallback);
-}
-
-function roomExampleAgent(id: RoomType, idx: number, fallback: string): string {
-  return i18n.t(`onboarding:rooms.${id}.exampleAgents.${idx}`, fallback);
-}
 
 // Distinct English department labels → kebab key. The English label remains
 // the internal grouping Map key in groupByDepartment(); this only maps the
@@ -679,6 +658,58 @@ function StepNav({
   );
 }
 
+// Small auto-scrolling (marquee) row of suggestion tags. The track holds the
+// list twice so the CSS marquee loops seamlessly; it pauses on hover so a tag
+// can be clicked to fill the field. Kept deliberately tiny and low-contrast.
+function RotatingTags({ tags, onPick }: { tags: string[]; onPick: (tag: string) => void }) {
+  const [paused, setPaused] = useState(false);
+  // The track holds the list twice so translating by -50% loops seamlessly.
+  const loop = [...tags, ...tags];
+  return (
+    <div
+      className="relative overflow-hidden"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      style={{
+        maskImage: "linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent)",
+        WebkitMaskImage: "linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent)",
+      }}
+    >
+      <div
+        className="flex w-max flex-nowrap gap-1.5"
+        style={{
+          animation: "cabinet-marquee 32s linear infinite",
+          animationPlayState: paused ? "paused" : "running",
+        }}
+      >
+        {loop.map((tag, i) => (
+          <button
+            key={`${tag}-${i}`}
+            type="button"
+            tabIndex={-1}
+            onClick={() => onPick(tag)}
+            className="shrink-0 cursor-pointer rounded-full px-2 py-0.5 text-[11px] transition-opacity hover:opacity-70"
+            style={{ background: WEB.bgWarm, color: WEB.textTertiary }}
+          >
+            {tag}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Onboarding heartbeat schedule → cron expression (the persona `heartbeat`
+// field is a cron string; see persona-manager.ts).
+const HEARTBEAT_CRON: Record<string, string> = {
+  hourly: "0 * * * *",
+  daily: "0 9 * * *",
+  weekly: "0 9 * * 1",
+};
+function scheduleToCron(schedule: string): string {
+  return HEARTBEAT_CRON[schedule] ?? HEARTBEAT_CRON.daily;
+}
+
 // Step 2 — "What is a Cabinet?" concept screen. Explains the object before we
 // ask the user to create one.
 
@@ -755,136 +786,6 @@ function WhatIsCabinetStep({
       {/* Real example — full window mockup */}
       <ShowcaseWindow showcase={showcase} />
 
-      <StepNav onBack={onBack} onNext={onNext} />
-    </div>
-  );
-}
-
-// Step 5 — "What can this agent access?" PLACEHOLDER. Interactive toggles, not
-// yet wired to the agent's permissions/tools.
-function AgentAccessStep({
-  agentName,
-  access,
-  setAccess,
-  onBack,
-  onNext,
-}: {
-  agentName: string;
-  access: string[];
-  setAccess: (next: string[]) => void;
-  onBack: () => void;
-  onNext: () => void;
-}) {
-  const { t } = useLocale();
-  const options = [
-    { key: "files", label: t("onboarding:access.files"), icon: FileText },
-    { key: "github", label: t("onboarding:access.github"), icon: Github },
-    { key: "slack", label: t("onboarding:access.slack"), icon: MessageSquare },
-    { key: "mcp", label: t("onboarding:access.mcp"), icon: Plug },
-    { key: "plugins", label: t("onboarding:access.plugins"), icon: Puzzle },
-    { key: "skills", label: t("onboarding:access.skills"), icon: Sparkles },
-  ];
-  const toggle = (k: string) =>
-    setAccess(access.includes(k) ? access.filter((x) => x !== k) : [...access, k]);
-  const name = agentName.trim() || t("onboarding:access.defaultAgent");
-  return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-7 animate-in fade-in duration-300">
-      <div className="text-center space-y-2">
-        <h1 className="font-logo text-2xl tracking-tight italic" style={{ color: WEB.text }}>
-          {t("onboarding:access.heading", { name })}
-        </h1>
-        <p className="text-sm leading-relaxed" style={{ color: WEB.textSecondary }}>
-          {t("onboarding:access.subtitle")}
-        </p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-        {options.map(({ key, label, icon: Icon }) => {
-          const on = access.includes(key);
-          return (
-            <button
-              key={key}
-              onClick={() => toggle(key)}
-              className="flex items-center gap-2.5 rounded-xl px-4 py-3 text-start transition-colors"
-              style={{
-                background: on ? WEB.accentBg : WEB.bgCard,
-                border: `1px solid ${on ? WEB.accent : WEB.border}`,
-              }}
-            >
-              <Icon className="size-4 shrink-0" style={{ color: on ? WEB.accent : WEB.textTertiary }} />
-              <span className="text-sm flex-1" style={{ color: WEB.text }}>{label}</span>
-              {on && <Check className="size-4 shrink-0" style={{ color: WEB.accent }} />}
-            </button>
-          );
-        })}
-      </div>
-      <p className="text-center text-xs" style={{ color: WEB.textTertiary }}>
-        {t("onboarding:access.placeholderNote")}
-      </p>
-      <StepNav onBack={onBack} onNext={onNext} />
-    </div>
-  );
-}
-
-// Step 6 — "Should it run on a heartbeat?" PLACEHOLDER. Off by default; not yet
-// wired to the agent's schedule.
-function HeartbeatStep({
-  agentName,
-  heartbeat,
-  setHeartbeat,
-  onBack,
-  onNext,
-}: {
-  agentName: string;
-  heartbeat: string;
-  setHeartbeat: (next: string) => void;
-  onBack: () => void;
-  onNext: () => void;
-}) {
-  const { t } = useLocale();
-  const options = [
-    { key: "off", label: t("onboarding:heartbeat.off"), hint: t("onboarding:heartbeat.offHint") },
-    { key: "daily", label: t("onboarding:heartbeat.daily"), hint: t("onboarding:heartbeat.dailyHint") },
-    { key: "weekly", label: t("onboarding:heartbeat.weekly"), hint: t("onboarding:heartbeat.weeklyHint") },
-  ];
-  const name = agentName.trim() || t("onboarding:access.defaultAgent");
-  return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-7 animate-in fade-in duration-300">
-      <div className="text-center space-y-2">
-        <h1 className="font-logo text-2xl tracking-tight italic" style={{ color: WEB.text }}>
-          {t("onboarding:heartbeat.heading", { name })}
-        </h1>
-        <p className="text-sm leading-relaxed" style={{ color: WEB.textSecondary }}>
-          {t("onboarding:heartbeat.subtitle")}
-        </p>
-      </div>
-      <div className="flex flex-col gap-2">
-        {options.map(({ key, label, hint }) => {
-          const on = heartbeat === key;
-          return (
-            <button
-              key={key}
-              onClick={() => setHeartbeat(key)}
-              className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 text-start transition-colors"
-              style={{
-                background: on ? WEB.accentBg : WEB.bgCard,
-                border: `1px solid ${on ? WEB.accent : WEB.border}`,
-              }}
-            >
-              <span className="min-w-0">
-                <span className="block text-sm font-medium" style={{ color: WEB.text }}>{label}</span>
-                <span className="block text-xs" style={{ color: WEB.textSecondary }}>{hint}</span>
-              </span>
-              {on && <Check className="size-4 shrink-0" style={{ color: WEB.accent }} />}
-            </button>
-          );
-        })}
-      </div>
-      <div
-        className="rounded-xl p-3 text-xs leading-relaxed"
-        style={{ background: WEB.bgWarm, color: WEB.textSecondary }}
-      >
-        {t("onboarding:heartbeat.tokenNote")}
-      </div>
       <StepNav onBack={onBack} onNext={onNext} />
     </div>
   );
@@ -986,12 +887,14 @@ function OnboardingCabinetRail({
   userName,
   firstTask,
   step,
+  heartbeatOn,
 }: {
   cabinetName: string;
   agentName: string;
   userName: string;
   firstTask: string;
   step: number;
+  heartbeatOn: boolean;
 }) {
   const { t } = useLocale();
   const person = userName.trim();
@@ -1070,7 +973,10 @@ function OnboardingCabinetRail({
                     <span className="min-w-0 flex-1 truncate text-[12px] font-medium" style={{ color: WEB.text }}>
                       {agent}
                     </span>
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: "#22c55e" }} />
+                    <span
+                      className={`h-2 w-2 shrink-0 rounded-full ${heartbeatOn ? "cabinet-task-heartbeat" : ""}`}
+                      style={{ background: "#22c55e" }}
+                    />
                   </div>
                 ) : (
                   <p className="text-[11px] leading-relaxed" style={{ color: WEB.textTertiary }}>
@@ -1119,16 +1025,22 @@ function OnboardingCabinetRail({
 function TeamBuildStep({
   firstAgent,
   setFirstAgent,
+  heartbeatEnabled,
+  setHeartbeatEnabled,
+  heartbeatSchedule,
+  setHeartbeatSchedule,
   onBack,
   onNext,
 }: {
   firstAgent: FirstAgentDraft;
   setFirstAgent: (next: FirstAgentDraft) => void;
+  heartbeatEnabled: boolean;
+  setHeartbeatEnabled: (next: boolean) => void;
+  heartbeatSchedule: string;
+  setHeartbeatSchedule: (next: string) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
-  const { t } = useLocale();
-
   const fieldStyle: React.CSSProperties = {
     background: WEB.bgCard,
     border: `1px solid ${WEB.border}`,
@@ -1140,95 +1052,154 @@ function TeamBuildStep({
     width: "100%",
     fontFamily: "inherit",
   };
+  const name = firstAgent.name.trim() || "your agent";
+  const schedules = [
+    { key: "hourly", label: "Hourly", when: "every hour" },
+    { key: "daily", label: "Daily", when: "every day at 9AM" },
+    { key: "weekly", label: "Weekly", when: "Mondays at 9AM" },
+  ];
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-7 animate-in fade-in duration-300">
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-6 animate-in fade-in duration-300">
       {/* Title */}
       <div className="text-center space-y-2">
-        <h1 className="font-logo text-2xl tracking-tight italic">
-          <Trans
-            i18nKey="onboarding:team.heading"
-            components={{ accent: <span style={{ color: WEB.accent }} /> }}
-          />
+        <h1 className="font-logo text-2xl tracking-tight italic" style={{ color: WEB.text }}>
+          Hire your <span style={{ color: WEB.accent }}>AI team</span>
         </h1>
         <p className="text-sm leading-relaxed" style={{ color: WEB.textSecondary }}>
-          {t("onboarding:team.subtitle")}
+          Start with your first teammate. It works for you 24/7, getting your work
+          done while you drink your coffee.
         </p>
       </div>
 
-      {/* Create-one-agent-from-scratch form */}
-      <div
-        className="space-y-5 rounded-2xl p-5"
-        style={{ background: WEB.bgCard, border: `1px solid ${WEB.border}` }}
-      >
+      {/* Questions — no container */}
+      <div className="space-y-5">
         <div className="space-y-2">
           <label className="text-sm font-medium" style={{ color: WEB.text }}>
-            {t("onboarding:team.nameLabel")}
+            Name your agent
           </label>
           <input
             value={firstAgent.name}
             onChange={(e) => setFirstAgent({ ...firstAgent, name: e.target.value })}
-            placeholder={t("onboarding:team.namePlaceholder")}
+            placeholder="Cabi"
             style={{ ...fieldStyle, height: 44 }}
             autoFocus
           />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium" style={{ color: WEB.text }}>
-            {t("onboarding:team.roleLabel")}
-          </label>
-          <input
-            value={firstAgent.role}
-            onChange={(e) => setFirstAgent({ ...firstAgent, role: e.target.value })}
-            placeholder={t("onboarding:team.rolePlaceholder")}
-            style={{ ...fieldStyle, height: 44 }}
+          <RotatingTags
+            tags={[
+              "Cabi",
+              "CEO",
+              "CTO",
+              "Harry",
+              "Diana",
+              "Salesman",
+              "Jarvis",
+              "Alfred",
+              "Friday",
+              "Scout",
+              "Ghostwriter",
+              "Sherlock",
+              "Nova",
+              "Maestro",
+              "Closer",
+            ]}
+            onPick={(tag) => setFirstAgent({ ...firstAgent, name: tag })}
           />
         </div>
 
         <div className="space-y-2">
           <label className="text-sm font-medium" style={{ color: WEB.text }}>
-            {t("onboarding:team.instructionsLabel")}
+            What should this agent do?
           </label>
           <textarea
             value={firstAgent.instructions}
             onChange={(e) =>
               setFirstAgent({ ...firstAgent, instructions: e.target.value })
             }
-            placeholder={t("onboarding:team.instructionsPlaceholder")}
-            rows={4}
-            style={{
-              ...fieldStyle,
-              padding: "10px 14px",
-              resize: "vertical",
-              lineHeight: 1.5,
-            }}
+            placeholder="e.g. Every morning, scan our subreddit and write up new user complaints."
+            rows={2}
+            style={{ ...fieldStyle, padding: "10px 14px", resize: "vertical", lineHeight: 1.5 }}
+          />
+        </div>
+      </div>
+
+      {/* Heartbeat */}
+      <div
+        className="rounded-2xl p-4 transition-all duration-300"
+        style={{
+          background: WEB.bgCard,
+          border: `1px solid ${heartbeatEnabled ? "rgba(34,197,94,0.4)" : WEB.border}`,
+          boxShadow: heartbeatEnabled
+            ? "0 0 0 4px rgba(34,197,94,0.08), 0 12px 32px -12px rgba(34,197,94,0.5)"
+            : "none",
+        }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <HeartPulse
+                className={`size-4 ${heartbeatEnabled ? "cabinet-task-heartbeat" : ""}`}
+                style={{ color: heartbeatEnabled ? "#22c55e" : WEB.textTertiary }}
+              />
+              <span className="text-sm font-medium" style={{ color: WEB.text }}>
+                Heartbeat
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed" style={{ color: WEB.textSecondary }}>
+              Give {name} a heartbeat and it runs on its own on a schedule, even while you are
+              away. Off means it only works when you ask.
+            </p>
+          </div>
+          <Switch
+            checked={heartbeatEnabled}
+            onCheckedChange={(v) => setHeartbeatEnabled(v)}
+            className="mt-0.5"
           />
         </div>
 
-        <p className="text-xs" style={{ color: WEB.textSecondary }}>
-          {t("onboarding:team.agentOptionalHint")}
-        </p>
+        {heartbeatEnabled && (
+          <div
+            className="mt-4 space-y-2 border-t pt-4 animate-in fade-in duration-200"
+            style={{ borderColor: WEB.borderLight }}
+          >
+            <p className="text-xs font-medium" style={{ color: WEB.text }}>
+              When should it run?
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {schedules.map(({ key, label, when }) => {
+                const sel = heartbeatSchedule === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setHeartbeatSchedule(key)}
+                    className="rounded-xl px-3 py-2.5 text-start transition-colors"
+                    style={{
+                      background: sel ? "rgba(34,197,94,0.10)" : WEB.bgWarm,
+                      border: `1px solid ${sel ? "rgba(34,197,94,0.45)" : WEB.border}`,
+                    }}
+                  >
+                    <span className="block text-[13px] font-medium" style={{ color: WEB.text }}>
+                      {label}
+                    </span>
+                    <span
+                      className="block text-[10px] leading-tight"
+                      style={{ color: sel ? "#16a34a" : WEB.textTertiary }}
+                    >
+                      {when}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] leading-relaxed" style={{ color: WEB.textTertiary }}>
+              Heads up: each run uses AI tokens (and your provider quota). You can change this anytime.
+            </p>
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center justify-between pt-1">
-        <button
-          onClick={onBack}
-          className="inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-medium transition-colors"
-          style={{ color: WEB.textSecondary }}
-        >
-          <ArrowLeft className="w-3.5 h-3.5 rtl:rotate-180" />
-          {t("onboarding:actions.back")}
-        </button>
-        <button
-          onClick={onNext}
-          className="inline-flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-medium text-white transition-all hover:-translate-y-0.5"
-          style={{ background: WEB.accent }}
-        >
-          {t("onboarding:actions.next")}
-          <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
-        </button>
-      </div>
+      <StepNav onBack={onBack} onNext={onNext} />
     </div>
   );
 }
@@ -1633,8 +1604,6 @@ const STEP_NAMES: Record<number, string> = {
   [STEP_WHAT_IS_CABINET]: "what-is-cabinet",
   [STEP_ROOM_SETUP]: "room-setup",
   [STEP_TEAM]: "team",
-  [STEP_ACCESS]: "agent-access",
-  [STEP_HEARTBEAT]: "heartbeat",
   [STEP_TASK]: "first-task",
   [STEP_PROVIDER]: "provider",
   [COMMUNITY_START_STEP]: "github",
@@ -1716,7 +1685,9 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     name: "",
     role: "",
     homeName: "",
-    roomType: "study",
+    // The onboarding room starts blank; the user names it and gives it a
+    // purpose, then adds capabilities (agents, skills, files) inside the app.
+    roomType: "blank",
     workspaceName: "",
     description: "",
     teamSize: "",
@@ -1726,7 +1697,6 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     () => new Set<string>(ROOMS[answers.roomType].mandatoryAgents),
     [answers.roomType]
   );
-  const activeRoom = ROOMS[answers.roomType];
   const descriptionInputRef = useRef<HTMLInputElement>(null);
 
   // Welcome-home typewriter. Starts after the blueprint-draw delay so the
@@ -1759,10 +1729,10 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     role: "",
     instructions: "",
   });
-  // Placeholder state for the new "access" + "heartbeat" steps. Interactive but
-  // not yet wired to the agent config / setup — see STEP_ACCESS / STEP_HEARTBEAT.
-  const [agentAccess, setAgentAccess] = useState<string[]>(["files"]);
-  const [agentHeartbeat, setAgentHeartbeat] = useState<string>("off");
+  // Heartbeat for the first agent (configured in the team step). Off by default;
+  // the schedule becomes a cron expression on launch (see scheduleToCron).
+  const [heartbeatEnabled, setHeartbeatEnabled] = useState<boolean>(false);
+  const [heartbeatSchedule, setHeartbeatSchedule] = useState<string>("daily");
   // Placeholder: the first task the user files for their agent (STEP_TASK).
   const [firstTask, setFirstTask] = useState<string>("");
   // Which real-world example is being previewed in the What-is-a-Cabinet step.
@@ -2051,6 +2021,8 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
             role: firstAgent.role.trim(),
             instructions: firstAgent.instructions.trim(),
             provider: selectedProvider || undefined,
+            heartbeat: scheduleToCron(heartbeatSchedule),
+            heartbeatEnabled,
           },
           locale,
         }),
@@ -2196,6 +2168,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
             userName={answers.name}
             firstTask={firstTask}
             step={step}
+            heartbeatOn={heartbeatEnabled}
           />
         )}
         <div className={showRail ? "min-w-0 flex-1" : "w-full"}>
@@ -2361,91 +2334,24 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
 
           {/* Step 3: Pick a room + name + describe the cabinet (merged) */}
           {step === STEP_ROOM_SETUP && (
-            <div className="mx-auto flex max-w-4xl flex-col gap-7 animate-in fade-in duration-300">
+            <div className="mx-auto flex max-w-xl flex-col gap-7 animate-in fade-in duration-300">
               <div className="text-center space-y-2">
-                <h1 className="font-logo text-2xl tracking-tight italic">
-                  <Trans
-                    i18nKey="onboarding:roomSetup.heading"
-                    components={{ accent: <span style={{ color: WEB.accent }} /> }}
-                  />
+                <h1 className="font-logo text-2xl tracking-tight italic" style={{ color: WEB.text }}>
+                  Create your first <span style={{ color: WEB.accent }}>room</span>
                 </h1>
                 <p className="text-sm leading-relaxed" style={{ color: WEB.textSecondary }}>
-                  {t("onboarding:roomSetup.subtitle")}
+                  A room is your workspace: one big cabinet for a single part of your work or
+                  life, where your AI team helps you get it done.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {ROOM_TYPES.map((id) => {
-                  const room = ROOMS[id];
-                  const Icon = room.icon;
-                  const isSelected = answers.roomType === id;
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => setAnswers({ ...answers, roomType: id })}
-                      className="group relative flex flex-col gap-2.5 rounded-xl p-4 text-left transition-all hover:-translate-y-0.5 overflow-hidden"
-                      style={{
-                        background: isSelected ? WEB.accentBg : WEB.bgCard,
-                        border: `1px solid ${isSelected ? WEB.accent : WEB.border}`,
-                        boxShadow: isSelected
-                          ? "0 4px 14px rgba(139, 94, 60, 0.15)"
-                          : "0 1px 2px rgba(59, 47, 47, 0.03)",
-                        minHeight: 170,
-                      }}
-                    >
-                      {/* Vague background glyph — blurred, tiny-opacity, bleeds off the card */}
-                      <Icon
-                        aria-hidden="true"
-                        className="pointer-events-none absolute transition-opacity duration-300"
-                        style={{
-                          [dir === "rtl" ? "left" : "right"]: -40,
-                          bottom: -40,
-                          width: 190,
-                          height: 190,
-                          color: WEB.accent,
-                          opacity: isSelected ? 0.09 : 0.045,
-                          strokeWidth: 1,
-                          filter: "blur(1.5px)",
-                        }}
-                      />
-                      <div className="relative space-y-1">
-                        <p className="text-sm font-semibold" style={{ color: WEB.text }}>
-                          {roomText(id, "label", room.label)}
-                        </p>
-                        <p className="text-[11px] leading-relaxed" style={{ color: WEB.textSecondary }}>
-                          {roomText(id, "tagline", room.tagline)}
-                        </p>
-                      </div>
-                      <div
-                        className="relative mt-auto flex flex-wrap items-center gap-1 pt-2"
-                        style={{ borderTop: `1px solid ${WEB.borderLight}` }}
-                      >
-                        {room.exampleAgents.slice(0, 2).map((ex, i) => (
-                          <span
-                            key={ex}
-                            className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-                            style={{
-                              background: isSelected ? WEB.bgCard : WEB.bgWarm,
-                              color: WEB.textSecondary,
-                            }}
-                          >
-                            {roomExampleAgent(id, i, ex)}
-                          </span>
-                        ))}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Cabinet name + description inputs, adaptive to the active room */}
-              <div
-                className="space-y-5 rounded-2xl p-5"
-                style={{ background: WEB.bgCard, border: `1px solid ${WEB.border}` }}
-              >
+              {/* Frame around the real use case + the outcome, not setup. The
+                  room starts blank; capabilities get added later in the app.
+                  No card wrapper: the questions sit directly on the page. */}
+              <div className="space-y-5">
                 <div className="space-y-2">
                   <label className="text-sm font-medium" style={{ color: WEB.text }}>
-                    {roomText(answers.roomType, "workspaceLabel", activeRoom.workspaceLabel)}
+                    What is this cabinet for?
                   </label>
                   <input
                     value={answers.workspaceName}
@@ -2458,14 +2364,31 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                         descriptionInputRef.current?.focus();
                       }
                     }}
-                    placeholder={roomText(answers.roomType, "workspacePlaceholder", activeRoom.workspacePlaceholder)}
+                    placeholder="My startup"
                     style={inputStyle}
+                  />
+                  <RotatingTags
+                    tags={[
+                      "work",
+                      "startup",
+                      "second brain",
+                      "family os",
+                      "gtm",
+                      "sales",
+                      "marketing",
+                      "client project",
+                      "repo",
+                      "research",
+                      "content",
+                      "studies",
+                    ]}
+                    onPick={(tag) => setAnswers({ ...answers, workspaceName: tag })}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium" style={{ color: WEB.text }}>
-                    {roomText(answers.roomType, "descriptionLabel", activeRoom.descriptionLabel)}
+                    What do you want to accomplish?
                   </label>
                   <input
                     ref={descriptionInputRef}
@@ -2479,11 +2402,24 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                         void goToProvider();
                       }
                     }}
-                    placeholder={roomText(answers.roomType, "descriptionPlaceholder", activeRoom.descriptionPlaceholder)}
+                    placeholder="Ship my MVP and get my first 100 users"
                     style={inputStyle}
                   />
+                  <RotatingTags
+                    tags={[
+                      "ship faster",
+                      "grow my audience",
+                      "get organized",
+                      "save time",
+                      "close deals",
+                      "launch",
+                      "write more",
+                      "automate busywork",
+                      "stay focused",
+                    ]}
+                    onPick={(tag) => setAnswers({ ...answers, description: tag })}
+                  />
                 </div>
-
               </div>
 
               <div className="flex items-center justify-between pt-1">
@@ -2508,46 +2444,27 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
             </div>
           )}
 
-          {/* Step 4: Build your team — title only for now */}
-          {/* Step 5: Configure your first agent */}
+          {/* Step 5: Configure your first agent (+ heartbeat) */}
           {step === STEP_TEAM && (
             <TeamBuildStep
               firstAgent={firstAgent}
               setFirstAgent={setFirstAgent}
+              heartbeatEnabled={heartbeatEnabled}
+              setHeartbeatEnabled={setHeartbeatEnabled}
+              heartbeatSchedule={heartbeatSchedule}
+              setHeartbeatSchedule={setHeartbeatSchedule}
               onBack={() => setStep(STEP_PROVIDER)}
-              onNext={() => setStep(STEP_ACCESS)}
-            />
-          )}
-
-          {/* Step 6: What can this agent access? (placeholder) */}
-          {step === STEP_ACCESS && (
-            <AgentAccessStep
-              agentName={firstAgent.name}
-              access={agentAccess}
-              setAccess={setAgentAccess}
-              onBack={() => setStep(STEP_TEAM)}
-              onNext={() => setStep(STEP_HEARTBEAT)}
-            />
-          )}
-
-          {/* Step 7: Should it run on a heartbeat? (placeholder) */}
-          {step === STEP_HEARTBEAT && (
-            <HeartbeatStep
-              agentName={firstAgent.name}
-              heartbeat={agentHeartbeat}
-              setHeartbeat={setAgentHeartbeat}
-              onBack={() => setStep(STEP_ACCESS)}
               onNext={() => setStep(STEP_TASK)}
             />
           )}
 
-          {/* Step 8: File your first task for the agent (placeholder) */}
+          {/* Step 6: File your first task for the agent (placeholder) */}
           {step === STEP_TASK && (
             <FirstTaskStep
               agentName={firstAgent.name}
               firstTask={firstTask}
               setFirstTask={setFirstTask}
-              onBack={() => setStep(STEP_HEARTBEAT)}
+              onBack={() => setStep(STEP_TEAM)}
               onNext={() => setStep(COMMUNITY_START_STEP)}
             />
           )}
