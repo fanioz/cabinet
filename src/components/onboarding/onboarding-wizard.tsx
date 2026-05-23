@@ -918,7 +918,7 @@ function OnboardingCabinetRail({
   );
 
   const shell = (children: ReactNode) => (
-    <div className="hidden lg:flex w-[260px] shrink-0 self-stretch">
+    <div className="hidden lg:flex items-center w-[260px] shrink-0 self-stretch">
       <div
         className="flex h-[480px] w-full flex-col overflow-hidden rounded-2xl"
         style={{
@@ -2057,7 +2057,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
       console.error("Setup failed:", e);
       setLaunching(false);
     }
-  }, [answers, firstAgent, selectedProvider, selectedModel, selectedEffort, locale, onComplete]);
+  }, [answers, firstAgent, heartbeatEnabled, heartbeatSchedule, selectedProvider, selectedModel, selectedEffort, locale, onComplete]);
 
   const communitySteps: CommunityStepConfig[] = [
     {
@@ -2170,8 +2170,13 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
             : step === STEP_WHAT_IS_CABINET
               ? "max-w-4xl"
               : "max-w-3xl"
-        } items-center justify-center ${
-          step === STEP_WELCOME_HOME ? "px-4 py-4" : "px-6 py-10"
+        } justify-center ${
+          // The intro card and welcome popup stay vertically centered; every
+          // other step top-anchors so the progress bar + title hold a steady
+          // position instead of re-centering as content height changes.
+          step === 0 || step === STEP_WELCOME_HOME ? "items-center" : "items-start"
+        } ${
+          step === STEP_WELCOME_HOME ? "px-4 py-4" : "px-6 pt-16 pb-12"
         }`}
         style={step === STEP_WELCOME_HOME ? undefined : dotGridStyle}
       >
@@ -2186,9 +2191,9 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
           />
         )}
         <div className={showRail ? "min-w-0 flex-1" : "w-full"}>
-          {/* Progress indicator — hidden on Welcome home so the popup truly
-              centers over the blueprint's patio. */}
-          {step !== STEP_WELCOME_HOME && (
+          {/* Progress indicator — hidden on the intro screen and Welcome home
+              (the entry screens), so it only appears once setup begins. */}
+          {step !== 0 && step !== STEP_WELCOME_HOME && (
             <div className="mb-10 flex items-center justify-center gap-2">
               {Array.from({ length: STEP_COUNT }, (_, i) => i).map((i) => (
                 <div
@@ -2203,6 +2208,10 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
               ))}
             </div>
           )}
+
+          {/* Step content — re-keyed per step so each navigation eases in
+              (fade + slide-up) while the progress bar above holds its place. */}
+          <div key={`step-${step}`} style={{ animation: "cabinet-tour-fade-up 0.4s ease-out" }}>
 
           {/* Step 0: Welcome — Dictionary card */}
           {step === 0 && (
@@ -2519,8 +2528,24 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
 
               {/* Registered CLI providers */}
               {providersLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="size-6 animate-spin" style={{ color: WEB.textTertiary }} />
+                <div className="space-y-2.5" aria-hidden>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-3 rounded-xl p-3.5"
+                      style={{ background: WEB.bgCard, border: `1px solid ${WEB.border}` }}
+                    >
+                      <div
+                        className="size-9 shrink-0 rounded-lg animate-pulse"
+                        style={{ background: WEB.borderLight }}
+                      />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="h-3 w-28 rounded animate-pulse" style={{ background: WEB.borderLight }} />
+                        <div className="h-2.5 w-44 rounded animate-pulse" style={{ background: WEB.borderLight }} />
+                      </div>
+                      <div className="h-6 w-16 shrink-0 rounded-full animate-pulse" style={{ background: WEB.borderLight }} />
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -3470,6 +3495,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>
