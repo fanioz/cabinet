@@ -49,6 +49,7 @@ interface OnboardingRequest {
   roomType?: RoomType;
   answers: {
     name?: string;
+    email?: string;
     // New field; falls back to legacy companyName if absent.
     workspaceName?: string;
     companyName?: string;
@@ -138,11 +139,18 @@ export async function POST(req: NextRequest) {
     // profile read during the wizard seeds user.json from the OS username
     // (os.userInfo().username) and that stale value sticks afterwards.
     const profileName = answers.name?.trim() || "";
-    if (profileName) {
+    const profileEmail = answers.email?.trim() || "";
+    if (profileName || profileEmail) {
       await fs.writeFile(
         path.join(CONFIG_DIR, "user.json"),
         JSON.stringify(
-          { name: profileName, displayName: "", role: "", avatar: "" },
+          {
+            name: profileName,
+            email: profileEmail,
+            displayName: "",
+            role: "",
+            avatar: "",
+          },
           null,
           2
         )

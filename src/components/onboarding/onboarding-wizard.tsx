@@ -41,6 +41,7 @@ import {
   recordWaitlistView,
   recordWaitlistStart,
   submitWaitlistEmail,
+  recordOnboardingEmail,
 } from "@/lib/telemetry/waitlist-client";
 import { acknowledgeDisclaimer } from "@/components/layout/breaking-changes-warning";
 import { useLocale } from "@/i18n/use-locale";
@@ -2041,6 +2042,14 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
           locale,
         }),
       });
+
+      // Best-effort: register the welcome-step email with our backend so we can
+      // learn who's onboarding. Goes through the waitlist (PII) channel, never
+      // the anonymous telemetry pipeline below.
+      const welcomeEmail = answers.email.trim();
+      if (welcomeEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(welcomeEmail)) {
+        recordOnboardingEmail(welcomeEmail);
+      }
 
       sendTelemetry("onboarding.completed", {
         roomType: answers.roomType ?? null,

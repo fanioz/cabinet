@@ -5,6 +5,7 @@ import { DATA_DIR } from "@/lib/storage/path-utils";
 
 export interface UserProfile {
   name: string;
+  email?: string;       // captured in onboarding; PII, stored locally
   displayName?: string;
   role?: string;
   iconKey?: string;
