@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import { log, success, error, warning } from "../lib/log.js";
 import { ensureApp } from "../lib/app-manager.js";
 import { openBrowser, spawnChild } from "../lib/process.js";
