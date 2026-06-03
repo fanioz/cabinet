@@ -16,9 +16,11 @@ const HOME = os.homedir();
 const CANDIDATE_GLOBS = [
   // macOS — Drive for Desktop (current)
   path.join(HOME, "Library", "CloudStorage"),
-  // macOS — legacy Backup and Sync
+  // macOS — legacy Backup and Sync / Windows — Google Drive for Desktop
   path.join(HOME, "Google Drive", "My Drive"),
   path.join(HOME, "Google Drive"),
+  // Windows — alternate install path used by some Drive for Desktop versions
+  path.join(HOME, "My Drive"),
   // Linux — rclone default mount or manual mount
   path.join(HOME, "GoogleDrive"),
 ];
