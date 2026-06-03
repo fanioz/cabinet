@@ -53,11 +53,14 @@ function FolderPickerDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   rootPath: string;
-  onSelect: (absPath: string, name: string) => void;
+  /** Returns a resolved promise on success; throws with an error message on failure. */
+  onSelect: (absPath: string, name: string) => Promise<void>;
 }) {
   const [currentPath, setCurrentPath] = useState(rootPath);
   const [dirs, setDirs] = useState<BrowseDir[]>([]);
   const [loading, setLoading] = useState(false);
+  const [mounting, setMounting] = useState(false);
+  const [mountError, setMountError] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>([]);
 
   const browse = useCallback(async (p: string) => {
@@ -82,6 +85,7 @@ function FolderPickerDialog({
   }, [open, rootPath, browse]);
 
   const navigateInto = (dir: BrowseDir) => {
+    setMountError(null);
     setHistory((h) => [...h, currentPath]);
     void browse(dir.path);
   };
@@ -89,6 +93,7 @@ function FolderPickerDialog({
   const navigateBack = () => {
     const prev = history[history.length - 1];
     if (!prev) return;
+    setMountError(null);
     setHistory((h) => h.slice(0, -1));
     void browse(prev);
   };
@@ -139,28 +144,45 @@ function FolderPickerDialog({
           </div>
         </div>
 
+        {mountError && (
+          <p className="text-[12px] text-destructive px-1">{mountError}</p>
+        )}
+
         <DialogFooter className="flex-row items-center justify-between gap-2 sm:justify-between">
           <Button
             variant="outline"
             size="sm"
             onClick={navigateBack}
-            disabled={history.length === 0}
+            disabled={history.length === 0 || mounting}
             className="shrink-0"
           >
             ← Back
           </Button>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={mounting}>
               Cancel
             </Button>
             <Button
               size="sm"
-              onClick={() => {
-                onSelect(currentPath, folderName);
-                onOpenChange(false);
+              disabled={mounting}
+              onClick={async () => {
+                setMounting(true);
+                setMountError(null);
+                try {
+                  await onSelect(currentPath, folderName);
+                  onOpenChange(false);
+                } catch (err) {
+                  setMountError(err instanceof Error ? err.message : "Failed to mount folder");
+                } finally {
+                  setMounting(false);
+                }
               }}
             >
-              <CheckCircle className="h-3.5 w-3.5 me-1.5" />
+              {mounting ? (
+                <Loader2 className="h-3.5 w-3.5 me-1.5 animate-spin" />
+              ) : (
+                <CheckCircle className="h-3.5 w-3.5 me-1.5" />
+              )}
               Mount &ldquo;{folderName}&rdquo;
             </Button>
           </div>
@@ -193,11 +215,15 @@ export function GoogleDriveSection() {
   }, [loadStatus]);
 
   const addMount = async (absPath: string, folderName: string) => {
-    await fetch("/api/google-drive/mounts", {
+    const res = await fetch("/api/google-drive/mounts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ absPath, folderName }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      throw new Error(data.error ?? `Server error ${res.status}`);
+    }
     await loadStatus();
     window.dispatchEvent(
       new CustomEvent("cabinet:toast", {
@@ -209,7 +235,16 @@ export function GoogleDriveSection() {
   const removeMount = async (id: string, name: string) => {
     setRemoving(id);
     try {
-      await fetch(`/api/google-drive/mounts/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/google-drive/mounts/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        window.dispatchEvent(
+          new CustomEvent("cabinet:toast", {
+            detail: { kind: "error", message: data.error ?? `Failed to remove "${name}"` },
+          })
+        );
+        return;
+      }
       await loadStatus();
       window.dispatchEvent(
         new CustomEvent("cabinet:toast", {
