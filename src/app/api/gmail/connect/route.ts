@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { encryptPassword } from "@/lib/gmail/crypto";
 import { validateCredentials } from "@/lib/gmail/imap-client";
+import { installGmailSkill } from "@/lib/gmail/skill";
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,6 +31,9 @@ export async function POST(request: NextRequest) {
        VALUES ('default', 'imap', ?, ?)
        ON CONFLICT(id) DO UPDATE SET email = excluded.email, imap_password = excluded.imap_password, method = 'imap'`
     ).run(email, encrypted);
+
+    // Install the Gmail skill so agents can use email tools immediately.
+    await installGmailSkill();
 
     return NextResponse.json({ ok: true, email });
   } catch (error) {
