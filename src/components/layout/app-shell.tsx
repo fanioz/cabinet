@@ -104,6 +104,13 @@ const RegistryBrowser = dynamic(
     import("@/components/registry/registry-browser").then((m) => m.RegistryBrowser),
   { ssr: false }
 );
+const IntegrationsHubPage = dynamic(
+  () =>
+    import("@/components/integrations/hub/integrations-hub-page").then(
+      (m) => m.IntegrationsHubPage
+    ),
+  { ssr: false }
+);
 const OnboardingWizard = dynamic(
   () =>
     import("@/components/onboarding/onboarding-wizard").then(
@@ -386,6 +393,9 @@ export function AppShell() {
         break;
       case "registry":
         title = `Registry — ${base}`;
+        break;
+      case "integrations":
+        title = `Integrations — ${base}`;
         break;
       default:
         title = base;
@@ -725,6 +735,7 @@ export function AppShell() {
     if (section.type === "home") return <HomeScreen />;
     if (section.type === "registry") return <RegistryBrowser />;
     if (section.type === "settings") return <SettingsPage />;
+    if (section.type === "integrations") return <IntegrationsHubPage />;
     if (section.type === "help") return <HelpPage />;
     if (section.type === "cabinet" && section.cabinetPath) {
       return <CabinetView cabinetPath={section.cabinetPath} />;
