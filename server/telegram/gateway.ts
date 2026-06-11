@@ -240,7 +240,7 @@ async function startInstance(cfg: TelegramGatewayConfig, d: TelegramGatewayDeps)
     }
     for (const chatId of staleNoticeChats) {
       await api
-        .sendMessage(chatId, "Back online — I ignored messages sent while Cabinet was off. Resend anything still needed.", {
+        .sendMessage(chatId, "Back online. I ignored messages sent while Cabinet was off. Resend anything still needed.", {
           disableNotification: true,
         })
         .catch(() => {});

@@ -35,7 +35,7 @@ import {
   readPersona,
   type AgentPersona,
 } from "../../src/lib/agents/persona-manager";
-import { listRooms } from "../../src/lib/cabinets/rooms";
+import { getHomeConfig, listRooms } from "../../src/lib/cabinets/rooms";
 import { DATA_DIR } from "../../src/lib/storage/path-utils";
 import { runSearch, type SearchSources } from "../search/search-service";
 import { stripAnsi } from "../pty/ansi";
@@ -100,9 +100,12 @@ export async function handleMessage(ctx: RouterContext, msg: TgMessage): Promise
 
   // Rolling rate limit (separate from the one-deep run queue).
   if (!checkAndRecordRate(state, Date.now())) {
-    await safeSend(ctx, chatId, "⏳ Slow down a little — try again in a moment.");
+    await safeSend(ctx, chatId, "⏳ Slow down a little, try again in a moment.");
     return;
   }
+
+  // Default the chat into a real room before anything runs or searches.
+  await ensureRoom(state);
 
   // Files/photos stage for the next message (or run now when captioned).
   if (msg.document || (msg.photo && msg.photo.length > 0)) {
@@ -114,7 +117,7 @@ export async function handleMessage(ctx: RouterContext, msg: TgMessage): Promise
   if (!text) return;
 
   if (text.startsWith("/")) {
-    await handleCommand(ctx, state, text);
+    await handleCommand(ctx, state, text, msg.from?.first_name);
     return;
   }
 
@@ -123,26 +126,68 @@ export async function handleMessage(ctx: RouterContext, msg: TgMessage): Promise
 }
 
 // ---------------------------------------------------------------------------
+// Room defaulting
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the chat's starting room once. The Rooms-v3 home is a neutral
+ * container, not a cabinet, so agents must not write into it by default —
+ * prefer the home config's default room, then the last active room, then the
+ * first listed room. Home only when no rooms exist at all.
+ */
+async function ensureRoom(state: ChatState): Promise<void> {
+  if (state.roomInitialized) return;
+  state.roomInitialized = true;
+  try {
+    const rooms = await listRooms();
+    if (rooms.length === 0) return; // roomless cabinet: home is all there is
+    const config = await getHomeConfig();
+    const preferred = [config.defaultRoom, config.lastActiveRoom].find(
+      (slug) => slug && rooms.some((r) => r.path === slug)
+    );
+    state.roomPath = preferred ?? rooms[0].path;
+  } catch {
+    // listRooms failure: stay in home rather than block the message
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
 
-async function handleCommand(ctx: RouterContext, state: ChatState, text: string): Promise<void> {
+async function buildWelcome(
+  ctx: RouterContext,
+  state: ChatState,
+  firstName: string | undefined
+): Promise<string> {
+  const orchestrator = await resolveOrchestrator(ctx, state);
+  const name = firstName ? ` ${firstName}` : "";
+  return [
+    `👋 Welcome${name} to your Cabinet!`,
+    "",
+    `🏠 You're in ${roomLabel(state)}. Switch with /room <slug> (/room lists them).`,
+    `💬 To run a task, just type it. ${orchestrator} picks it up and replies here.`,
+    `🎯 Want a specific agent once? @slug <text> (/agents lists them).`,
+    `🔍 /search <query> searches your knowledge base.`,
+    `📎 Send a file or photo to attach it to your next message.`,
+    `🆕 /new starts fresh · /stop cancels · /status shows the run · /verbose streams live output.`,
+  ].join("\n");
+}
+
+async function handleCommand(
+  ctx: RouterContext,
+  state: ChatState,
+  text: string,
+  firstName?: string
+): Promise<void> {
   const [rawCmd, ...rest] = text.split(/\s+/);
   const cmd = rawCmd.toLowerCase().replace(/@[a-z0-9_]+$/i, ""); // strip /cmd@botname
   const arg = rest.join(" ").trim();
 
   switch (cmd) {
-    case "/start": {
-      const orchestrator = await resolveOrchestrator(ctx, state);
-      await safeSend(
-        ctx,
-        state.chatId,
-        [
-          `Connected to Cabinet via @${ctx.botUsername}.`,
-          `Send a message and ${orchestrator} will handle it in ${roomLabel(state)}.`,
-          `Prefix with @slug to target one agent once. /help lists everything.`,
-        ].join("\n")
-      );
+    case "/start":
+    case "/welcome": {
+      await safeSend(ctx, state.chatId, await buildWelcome(ctx, state, firstName));
       return;
     }
     case "/help": {
@@ -152,13 +197,14 @@ async function handleCommand(ctx: RouterContext, state: ChatState, text: string)
         state.chatId,
         [
           "Commands:",
-          "/new — start a fresh conversation",
-          "/status — active run, queue, room, verbosity",
-          "/stop — cancel the active run",
-          "/search <query> — search the knowledge base",
-          "/agents — list agents you can @-target",
-          "/room [<slug>] — show or switch the active room",
-          "/verbose — toggle live output streaming",
+          "/new - start a fresh conversation",
+          "/status - active run, queue, room, verbosity",
+          "/stop - cancel the active run",
+          "/search <query> - search the knowledge base",
+          "/agents - list agents you can @-target",
+          "/room [<slug>] - show or switch the active room",
+          "/verbose - toggle live output streaming",
+          "/welcome - show the welcome guide again",
           "",
           `Plain text runs ${orchestrator} in ${roomLabel(state)}.`,
           "@slug <text> runs one message against that agent.",
@@ -170,7 +216,11 @@ async function handleCommand(ctx: RouterContext, state: ChatState, text: string)
     }
     case "/new": {
       resetConversation(state);
-      await safeSend(ctx, state.chatId, "🆕 Fresh conversation. What's next?");
+      await safeSend(
+        ctx,
+        state.chatId,
+        `🆕 Fresh conversation.\n\n${await buildWelcome(ctx, state, firstName)}`
+      );
       return;
     }
     case "/status": {
@@ -215,13 +265,13 @@ async function handleCommand(ctx: RouterContext, state: ChatState, text: string)
         ctx,
         state.chatId,
         state.verbose
-          ? "🔊 Verbose on — streaming live output."
-          : "🔇 Verbose off — concise replies only."
+          ? "🔊 Verbose on. Streaming live output."
+          : "🔇 Verbose off. Concise replies only."
       );
       return;
     }
     default:
-      await safeSend(ctx, state.chatId, `Unknown command ${cmd} — try /help.`);
+      await safeSend(ctx, state.chatId, `Unknown command ${cmd}, try /help.`);
   }
 }
 
@@ -233,8 +283,8 @@ async function runSearchCommand(ctx: RouterContext, state: ChatState, query: str
   const sources = await ctx.getSearchSources();
   const resp = runSearch(sources, query, "all", 5, state.roomPath ?? undefined);
   const lines: string[] = [];
-  for (const p of resp.pages.slice(0, 5)) lines.push(`📄 ${p.title} — ${p.path}`);
-  for (const a of resp.agents.slice(0, 3)) lines.push(`🤖 ${a.title}${a.role ? ` — ${a.role}` : ""}`);
+  for (const p of resp.pages.slice(0, 5)) lines.push(`📄 ${p.title} · ${p.path}`);
+  for (const a of resp.agents.slice(0, 3)) lines.push(`🤖 ${a.title}${a.role ? ` · ${a.role}` : ""}`);
   for (const t of resp.tasks.slice(0, 3)) lines.push(`✅ ${t.title}${t.agent ? ` (${t.agent})` : ""}`);
   await safeSend(
     ctx,
@@ -254,7 +304,7 @@ async function runAgentsCommand(ctx: RouterContext, state: ChatState): Promise<v
   const orchestrator = await resolveOrchestrator(ctx, state);
   const lines = personas.map((p) => {
     const mark = p.slug === orchestrator ? " ⭐ (orchestrator)" : "";
-    return `@${p.slug} — ${p.role || p.name}${mark}`;
+    return `@${p.slug} · ${p.role || p.name}${mark}`;
   });
   await safeSend(
     ctx,
@@ -266,7 +316,7 @@ async function runAgentsCommand(ctx: RouterContext, state: ChatState): Promise<v
 async function runRoomCommand(ctx: RouterContext, state: ChatState, arg: string): Promise<void> {
   const rooms = await listRooms();
   if (!arg) {
-    const list = rooms.length > 0 ? rooms.map((r) => `• ${r.path} — ${r.name}`).join("\n") : "(no rooms)";
+    const list = rooms.length > 0 ? rooms.map((r) => `• ${r.path} · ${r.name}`).join("\n") : "(no rooms)";
     await safeSend(
       ctx,
       state.chatId,
@@ -329,11 +379,11 @@ async function enqueueOrRun(
 ): Promise<void> {
   if (state.busy) {
     if (state.queued) {
-      await safeSend(ctx, state.chatId, "⏳ One message is already queued — try again after it runs.");
+      await safeSend(ctx, state.chatId, "⏳ One message is already queued. Try again after it runs.");
       return;
     }
     state.queued = { text, atMention, queuedAt: Date.now() };
-    await safeSend(ctx, state.chatId, "⏳ Queued — will run when the current task finishes.");
+    await safeSend(ctx, state.chatId, "⏳ Queued. It will run when the current task finishes.");
     return;
   }
   state.busy = true; // claimed synchronously; released in runMessage's finally
@@ -360,7 +410,7 @@ async function runMessage(
       oneShot = true;
     } else {
       targetSlug = await resolveOrchestrator(ctx, state);
-      note = `(no agent @${atMention} here — using ${targetSlug})\n`;
+      note = `(no agent @${atMention} here, using ${targetSlug})\n`;
     }
   } else {
     targetSlug = await resolveOrchestrator(ctx, state);
@@ -467,7 +517,7 @@ async function executeContinue(
     attachmentPaths: staged.length > 0 ? staged : undefined,
     timeoutMs: GATEWAY_DEADLINE_MS, // explicit — defaults to 15 min upstream
   });
-  if (!meta) return { finalText: "Conversation not found — /new to start fresh.", failed: true };
+  if (!meta) return { finalText: "Conversation not found. Send /new to start fresh.", failed: true };
   const turns = await readConversationTurns(conversationId, cabinetPath);
   const lastAgent = [...turns].reverse().find((t) => t.role === "agent" && !t.pending);
   return {
@@ -597,7 +647,7 @@ async function stopActiveRun(ctx: RouterContext, state: ChatState): Promise<void
   await safeSend(
     ctx,
     state.chatId,
-    stopped ? "🛑 Stopping the run…" : "Couldn't reach the run — it may already be finishing."
+    stopped ? "🛑 Stopping the run…" : "Couldn't reach the run. It may already be finishing."
   );
 }
 
@@ -613,7 +663,7 @@ async function handleIncomingFile(ctx: RouterContext, state: ChatState, msg: TgM
   if (!fileId) return;
 
   if (size > MAX_FILE_BYTES) {
-    await safeSend(ctx, state.chatId, "That file is over Telegram's 20 MB bot limit — try a smaller one.");
+    await safeSend(ctx, state.chatId, "That file is over Telegram's 20 MB bot limit. Try a smaller one.");
     return;
   }
 
@@ -632,7 +682,7 @@ async function handleIncomingFile(ctx: RouterContext, state: ChatState, msg: TgM
       const atMention = parseAtMention(caption);
       await enqueueOrRun(ctx, state, atMention?.rest ?? caption, atMention?.slug ?? null);
     } else {
-      await safeSend(ctx, state.chatId, "📎 Attached — what should I do with it?");
+      await safeSend(ctx, state.chatId, "📎 Attached. What should I do with it?");
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "download failed";

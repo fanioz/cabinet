@@ -38,6 +38,14 @@ export interface ChatState {
   conversationId: string | null;
   /** Active room cabinetPath; null = home cabinet. */
   roomPath: string | null;
+  /**
+   * Whether roomPath has been resolved for this chat. On first contact the
+   * router defaults to a real room (home-config default → last active →
+   * first listed) because the Rooms-v3 home is a neutral container, not a
+   * cabinet agents should write into. null roomPath + initialized=true means
+   * the user explicitly chose home (or no rooms exist).
+   */
+  roomInitialized: boolean;
   verbose: boolean;
   activeRun: ActiveRun | null;
   queued: QueuedMessage | null;
@@ -61,6 +69,7 @@ export function getChatState(chatId: number): ChatState {
       busy: false,
       conversationId: null,
       roomPath: null,
+      roomInitialized: false,
       verbose: false,
       activeRun: null,
       queued: null,
@@ -80,6 +89,7 @@ export function resetConversation(state: ChatState): void {
 
 export function switchRoom(state: ChatState, roomPath: string | null): void {
   state.roomPath = roomPath;
+  state.roomInitialized = true;
   // Fresh room = fresh orchestrator resolution + fresh conversation.
   state.orchestratorSlug = null;
   state.conversationId = null;

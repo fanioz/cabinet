@@ -54,7 +54,7 @@ From product review (2026-06-10), both rounds:
 | **File / photo** | **Attach to next message** | A sent file is saved to the cabinet, acked, and attached to the next text message's run. |
 | **Concurrency** | **Queue** | A new message during a live run is queued and runs next (FIFO), not rejected or run in parallel. |
 | **Reply format** | **Rich, fall back to plain** | Render as MarkdownV2 (bold/code/links); on escape error, resend as plain text. |
-| **Rooms** | **`/room <slug>` in v1** | Per-chat active cabinet; default is the home cabinet. `/room` switches; messages then run in that room. **No `TELEGRAM_DEFAULT_ROOM` env** — every chat starts in home. |
+| **Rooms** | **`/room <slug>` in v1** | Per-chat active cabinet. **Default changed in use (2026-06-11): a chat starts in a real room** — home-config default room → last active room → first listed room — because the Rooms-v3 home is a neutral container, not a cabinet; agents writing into it pollute the data root. Home only when no rooms exist (or explicit `/room home`). Still no `TELEGRAM_DEFAULT_ROOM` env. |
 | **Session state** | **Ephemeral (in-memory)** | Per-chat state (conversation pointer, active room, `verbose`, queue, staged files) lives in memory only. A daemon restart resets each chat to a fresh conversation in home with `/verbose` off; no disk snapshot. |
 | **Run timeout** | **None — rely on `/stop`** | Telegram-triggered runs have no wall-clock cap, matching in-app behaviour. They end on completion or when the user sends `/stop`. Implementation note: the reused polling seams default to 15-minute deadlines — the gateway must pass explicit large deadlines (§5/§8). |
 | **Rate limit** | **1 in-flight + 10 msgs/60 s** | One active run per chat; up to 10 messages per rolling 60 s before a soft "slow down" notice. The one-deep queue still gates concurrency. |
@@ -193,9 +193,9 @@ Commands:
 
 | Command | Behaviour |
 |---|---|
-| `/start` | Greeting + bot identity + the active orchestrator + active room + a one-line how-to. Refuse here too if the sender is not on the allowlist. |
+| `/start` / `/welcome` | Personalized welcome ("Welcome <first name> to your Cabinet!"): active room + how to switch, how to run a task, `@slug`, `/search`, files, and the session-control one-liner. Refuse here too if the sender is not on the allowlist. |
 | `/help` | List commands, the active orchestrator, the active room, and verbose state. |
-| `/new` | Drop the chat's "current conversation" pointer. Next message starts a fresh conversation. |
+| `/new` | Drop the chat's "current conversation" pointer and re-show the welcome guide. Next message starts a fresh conversation. |
 | `/status` | Show the active run (agent, elapsed, conversation id), the **queued** message if any, the active room, and verbose state. |
 | `/stop` | Cancel the chat's active run (`stopDaemonSession` / `session.stop`). A queued message, if any, then runs. |
 | `/search <query>` | `runSearch(sources, query, "all", 5, activeRoomSlug)` against the daemon's live index; reply with titled, path-tagged hits (pages 📄 / agents 🤖 / tasks ✅). |
@@ -404,7 +404,11 @@ Controls:
 ## 13. Multi-cabinet / rooms (in v1)
 
 Cabinet is room-isolated (Rooms v3). Each chat has an **active room** stored in
-session state, defaulting to the **home cabinet** (`cabinetPath: undefined`).
+session state. On first contact the router resolves a **real room** (home
+config's `defaultRoom` → `lastActiveRoom` → first room from `listRooms()`);
+the neutral home container is the default only when no rooms exist, since
+agents writing into it pollute the data root (changed 2026-06-11 after
+dogfooding; originally "always home").
 
 - `/room` with no arg: reply with the current room and the list from
   `listRooms()` (which already excludes the home and plain folders).
