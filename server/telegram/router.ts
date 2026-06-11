@@ -592,7 +592,9 @@ async function runMessage(
       });
       const meta = await startConversationRun({
         agentSlug: targetSlug,
-        title: built.title,
+        // Paper plane marks Telegram-launched tasks in every title surface
+        // (board, lists, toasts) on top of the trigger badge.
+        title: `✈️ ${built.title}`,
         trigger: "telegram",
         prompt: built.prompt,
         providerId: overrideProviderId ?? built.providerId,
