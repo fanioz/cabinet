@@ -59,6 +59,7 @@ export interface ChatState {
    */
   providerOverride: string | null;
   modelOverride: string | null;
+  effortOverride: string | null;
   /** Rolling message timestamps for the 10-per-60s rate limit. */
   recentMessageTimes: number[];
   /** Whether this denied sender already got the one refusal reply. */
@@ -83,6 +84,7 @@ export function getChatState(chatId: number): ChatState {
       orchestratorSlug: null,
       providerOverride: null,
       modelOverride: null,
+      effortOverride: null,
       recentMessageTimes: [],
       refusalSent: false,
     };

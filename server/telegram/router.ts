@@ -240,9 +240,10 @@ async function handleCommand(
       }
       lines.push(`Room: ${roomLabel(state)} · Verbose: ${state.verbose ? "on" : "off"}`);
       if (state.providerOverride) {
-        lines.push(
-          `Runtime: ${state.providerOverride}${state.modelOverride ? ` · ${state.modelOverride}` : ""} (set via /model)`
-        );
+        const parts = [state.providerOverride, state.modelOverride, state.effortOverride]
+          .filter(Boolean)
+          .join(" · ");
+        lines.push(`Runtime: ${parts} (set via /model)`);
       }
       await safeSend(ctx, state.chatId, lines.join("\n"));
       return;
@@ -360,10 +361,14 @@ async function runModelCommand(ctx: RouterContext, state: ChatState, arg: string
 
   if (!arg) {
     const current = state.providerOverride
-      ? `${state.providerOverride}${state.modelOverride ? ` · ${state.modelOverride}` : ""}`
+      ? [state.providerOverride, state.modelOverride, state.effortOverride]
+          .filter(Boolean)
+          .join(" · ")
       : "each agent's own default";
     const lines = providers.map((p) => {
-      const models = (p.models ?? []).map((m) => m.id).join(", ");
+      const models = (p.models ?? [])
+        .map((m) => (m.effortLevels?.length ? `${m.id}*` : m.id))
+        .join(", ");
       return `• ${p.id}${models ? `: ${models}` : ""}`;
     });
     await safeSend(
@@ -372,22 +377,23 @@ async function runModelCommand(ctx: RouterContext, state: ChatState, arg: string
       [
         `Current runtime: ${current}.`,
         "",
-        "Providers and models:",
+        "Providers and models (* = supports effort):",
         ...lines,
         "",
-        "Set with /model <provider> [<model>], e.g. /model claude-code sonnet.",
+        "Set with /model <provider> [<model>] [<effort>], e.g. /model claude-code opus max.",
+        "When a model supports effort, the highest level is used unless you pick one.",
         "Back to the defaults with /model reset.",
       ].join("\n")
     );
     return;
   }
 
-  const [providerArg, ...modelParts] = arg.split(/\s+/);
-  const modelArg = modelParts.join(" ").trim();
+  const [providerArg, ...restParts] = arg.split(/\s+/);
 
   if (/^(reset|default)$/i.test(providerArg)) {
     state.providerOverride = null;
     state.modelOverride = null;
+    state.effortOverride = null;
     await safeSend(ctx, state.chatId, "✅ Runtime reset. Each agent uses its own default again.");
     return;
   }
@@ -402,30 +408,62 @@ async function runModelCommand(ctx: RouterContext, state: ChatState, arg: string
     return;
   }
 
+  // Args after the provider: a model id, an effort id, or "model effort".
+  // A bare effort id ("/model claude-code max") applies to the persona's model.
+  const providerModels = provider.models ?? [];
+  const effortIdsAcrossModels = new Set(
+    [...providerModels.flatMap((m) => m.effortLevels ?? []), ...(provider.effortLevels ?? [])].map(
+      (l) => l.id.toLowerCase()
+    )
+  );
+
   let model: string | null = null;
-  if (modelArg) {
-    const known = (provider.models ?? []).find(
-      (m) => m.id.toLowerCase() === modelArg.toLowerCase()
-    );
-    if (!known && (provider.models?.length ?? 0) > 0) {
-      await safeSend(
-        ctx,
-        state.chatId,
-        `No model "${modelArg}" for ${provider.id}. Models: ${provider
-          .models!.map((m) => m.id)
-          .join(", ")}`
-      );
-      return;
+  let effort: string | null = null;
+  for (const token of restParts.filter(Boolean)) {
+    const asModel = providerModels.find((m) => m.id.toLowerCase() === token.toLowerCase());
+    if (asModel && !model) {
+      model = asModel.id;
+      continue;
     }
-    model = known?.id ?? modelArg;
+    if (effortIdsAcrossModels.has(token.toLowerCase()) && !effort) {
+      effort = token.toLowerCase();
+      continue;
+    }
+    const modelList = providerModels.map((m) => m.id).join(", ");
+    await safeSend(
+      ctx,
+      state.chatId,
+      `Didn't recognize "${token}" for ${provider.id}.${modelList ? ` Models: ${modelList}.` : ""}${
+        effortIdsAcrossModels.size > 0 ? ` Efforts: ${[...effortIdsAcrossModels].join(", ")}.` : ""
+      }`
+    );
+    return;
+  }
+
+  // "Max effort if you can": when the chosen model supports effort levels and
+  // none was given, default to the highest one (lists are ordered low → max).
+  const chosenModel = model ? providerModels.find((m) => m.id === model) : undefined;
+  const modelLevels = chosenModel?.effortLevels ?? [];
+  if (!effort && modelLevels.length > 0) {
+    effort = modelLevels[modelLevels.length - 1].id;
+  }
+  if (effort && modelLevels.length > 0 && !modelLevels.some((l) => l.id === effort)) {
+    await safeSend(
+      ctx,
+      state.chatId,
+      `Model ${model} supports: ${modelLevels.map((l) => l.id).join(", ")}.`
+    );
+    return;
   }
 
   state.providerOverride = provider.id;
   state.modelOverride = model;
+  state.effortOverride = effort;
+  const summary = [provider.name, model, effort && `effort: ${effort}`].filter(Boolean).join(" · ");
   await safeSend(
     ctx,
     state.chatId,
-    `✅ Runtime set: ${provider.name}${model ? ` · ${model}` : ""}. Applies from your next message. /model reset to undo.`
+    `✅ Runtime set: ${summary}. Applies from your next message. /model reset to undo.`
   );
 }
 
@@ -535,6 +573,7 @@ async function runMessage(
       ? defaultAdapterTypeForProvider(overrideProviderId)
       : undefined;
     const overrideModel = state.modelOverride ?? undefined;
+    const overrideEffort = state.effortOverride ?? undefined;
 
     const continuing = !oneShot && state.conversationId !== null;
     if (continuing) {
@@ -543,6 +582,7 @@ async function runMessage(
         providerId: overrideProviderId,
         adapterType: overrideAdapterType,
         model: overrideModel,
+        effort: overrideEffort,
       });
     } else {
       const built = await buildManualConversationPrompt({
@@ -557,9 +597,14 @@ async function runMessage(
         prompt: built.prompt,
         providerId: overrideProviderId ?? built.providerId,
         adapterType: overrideAdapterType ?? built.adapterType,
-        adapterConfig: overrideModel
-          ? { ...(built.adapterConfig ?? {}), model: overrideModel }
-          : built.adapterConfig,
+        adapterConfig:
+          overrideModel || overrideEffort
+            ? {
+                ...(built.adapterConfig ?? {}),
+                ...(overrideModel ? { model: overrideModel } : {}),
+                ...(overrideEffort ? { effort: overrideEffort } : {}),
+              }
+            : built.adapterConfig,
         cwd: built.cwd,
         cabinetPath,
         attachmentPaths: staged.length > 0 ? staged : undefined,
@@ -615,7 +660,7 @@ async function executeContinue(
   cabinetPath: string | undefined,
   text: string,
   staged: string[],
-  override: { providerId?: string; adapterType?: string; model?: string } = {}
+  override: { providerId?: string; adapterType?: string; model?: string; effort?: string } = {}
 ): Promise<{ finalText: string; failed: boolean }> {
   const meta = await continueConversationRun(conversationId, {
     userMessage: text,
@@ -625,6 +670,7 @@ async function executeContinue(
     providerId: override.providerId,
     adapterType: override.adapterType,
     model: override.model,
+    effort: override.effort,
   });
   if (!meta) return { finalText: "Conversation not found. Send /new to start fresh.", failed: true };
   const turns = await readConversationTurns(conversationId, cabinetPath);
