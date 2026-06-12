@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Terminal } from "lucide-react";
+import { AlertCircle, Terminal } from "lucide-react";
 import { ComposerInput } from "@/components/composer/composer-input";
 import {
   TaskRuntimePicker,
@@ -84,6 +84,11 @@ export interface TaskComposerPanelProps {
   className?: string;
   disabled?: boolean;
   /**
+   * Why the last send failed (the draft is restored by the composer hook).
+   * Rendered as a banner above the input; null/undefined hides it.
+   */
+  sendError?: string | null;
+  /**
    * When provided, renders the WhenChip in the composer's top-right corner.
    * Called when the user picks a non-"now" mode (recurring or heartbeat) —
    * the current draft message is forwarded so the parent can open
@@ -117,6 +122,7 @@ export function TaskComposerPanel({
   autoLoadMentions = true,
   className,
   disabled,
+  sendError,
   onScheduleHandoff,
   agent,
   compact = false,
@@ -285,6 +291,13 @@ export function TaskComposerPanel({
             <span className="relative inline-flex size-1.5 rounded-full bg-amber-500" />
           </span>
           Agent is waiting for your reply
+        </div>
+      ) : null}
+
+      {sendError ? (
+        <div className="mb-2 flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] font-medium text-red-700 dark:text-red-400">
+          <AlertCircle className="size-3 mt-[2px] shrink-0" />
+          <span>{sendError}</span>
         </div>
       ) : null}
 

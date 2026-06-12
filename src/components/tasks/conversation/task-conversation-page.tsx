@@ -447,6 +447,9 @@ export function TaskConversationPage({
   const turnUser =
     userState.status === "ready" ? userState.data.profile : null;
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Send failures get their own surface: loadError only renders when the
+  // task itself failed to load, so a swallowed send error was invisible.
+  const [sendError, setSendError] = useState<string | null>(null);
   const [connectTimedOut, setConnectTimedOut] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const [editingSummary, setEditingSummary] = useState(false);
@@ -1020,6 +1023,7 @@ export function TaskConversationPage({
       }
 
       setBusy(true);
+      setSendError(null);
       try {
         const result = await postTurn(
           taskId,
@@ -1033,9 +1037,13 @@ export function TaskConversationPage({
           },
           task.meta.cabinetPath
         );
-        setTask(result.task);
+        // postTurn returns task: null when the send was accepted but the
+        // refetch failed — keep the current view and let SSE reconcile.
+        if (result.task) setTask(result.task);
       } catch (e) {
-        setLoadError(e instanceof Error ? e.message : "Failed to send");
+        setSendError(e instanceof Error ? e.message : "Failed to send");
+        // Rethrow so the composer keeps the draft and clears its spinner.
+        throw e;
       } finally {
         setBusy(false);
       }
@@ -1995,6 +2003,7 @@ export function TaskConversationPage({
                         cabinetPath={task.meta.cabinetPath}
                         conversationId={task.meta.id}
                         onSend={handleSend}
+                        sendError={sendError}
                         onScheduleHandoff={openScheduleHandoff}
                         agent={
                           turnAgent
@@ -2094,6 +2103,7 @@ export function TaskConversationPage({
                   cabinetPath={task.meta.cabinetPath}
                   conversationId={task.meta.id}
                   onSend={handleSend}
+                  sendError={sendError}
                   onScheduleHandoff={openScheduleHandoff}
                   agent={
                     turnAgent
