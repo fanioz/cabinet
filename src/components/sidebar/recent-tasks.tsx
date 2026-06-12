@@ -183,11 +183,15 @@ export function RecentTasks({
 
   // Reset visibility when the user changes cabinet — they're switching
   // contexts and probably want to see the fresh top-of-list, not their
-  // "Show older" expansion from the previous cabinet.
-  useEffect(() => {
+  // "Show older" expansion from the previous cabinet. Adjust state during
+  // render instead of in an effect (react-hooks/set-state-in-effect) — the
+  // pattern from react.dev/learn/you-might-not-need-an-effect.
+  const [prevCabinetPath, setPrevCabinetPath] = useState(cabinetPath);
+  if (cabinetPath !== prevCabinetPath) {
+    setPrevCabinetPath(cabinetPath);
     setVisibleCount(INITIAL_VISIBLE);
     setFetchLimit(INITIAL_VISIBLE + PAGE_STEP);
-  }, [cabinetPath]);
+  }
 
   const agentColorMap = useMemo(() => {
     const map = new Map<string, string>();

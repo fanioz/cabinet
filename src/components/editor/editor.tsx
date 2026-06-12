@@ -94,7 +94,7 @@ function resolveInternalLink(
   const allPages = flattenTree(nodes);
 
   // Clean up the href: strip .md extension, leading ./ or /
-  let linkPath = href
+  const linkPath = href
     .replace(/\.md$/, "")
     .replace(/^\.\//, "")
     .replace(/^\//, "");
@@ -342,8 +342,15 @@ export function KBEditor() {
 
   // When content updates from store (after loadPage), set it in editor
   const prevPathRef = useRef<string | null>(null);
-  const renderedKeyRef = useRef<string | null>(null);
-  const [renderedPath, setRenderedPath] = useState<string | null>(null);
+  // What the editor DOM currently shows, recorded when the async markdown
+  // render completes. `key` dedupes identical (path, assetBase, content)
+  // renders; `path` (which `key` embeds, so the two never disagree) drives
+  // the loading overlay. One state object — set only in the async
+  // completion — instead of a ref + separate renderedPath state, so the
+  // effect never has to setState synchronously
+  // (react-hooks/set-state-in-effect).
+  const [rendered, setRendered] = useState<{ key: string; path: string } | null>(null);
+  const renderedPath = rendered?.path ?? null;
   useEffect(() => {
     if (!editor || currentPath === null) return;
     // Skip if content hasn't actually changed (same path, dirty edit)
@@ -359,10 +366,7 @@ export function KBEditor() {
     // fallback) re-renders once the fetch reveals a standalone page's real
     // asset base.
     const key = `${currentPath}\u0000${assetBase ?? ""}\u0000${content}`;
-    if (renderedKeyRef.current === key) {
-      if (renderedPath !== currentPath) setRenderedPath(currentPath);
-      return;
-    }
+    if (rendered?.key === key) return;
     prevPathRef.current = currentPath;
 
     const setContent = async () => {
@@ -371,15 +375,14 @@ export function KBEditor() {
       // image refs; currentPath is only correct for directory pages.
       const html = await markdownToHtml(content, assetBase ?? currentPath);
       editor.commands.setContent(html);
-      renderedKeyRef.current = key;
-      setRenderedPath(currentPath);
+      setRendered({ key, path: currentPath });
       setTimeout(() => {
         isLoadingRef.current = false;
       }, 50);
     };
 
     setContent();
-  }, [editor, content, currentPath, assetBase, isLoading, renderedPath]);
+  }, [editor, content, currentPath, assetBase, isLoading, rendered]);
 
   // Push frontmatter.dir into the ProseMirror contenteditable element so list
   // indentation, table cell alignment, and block direction all flip when the
