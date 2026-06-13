@@ -41,6 +41,7 @@ import { NarrowViewportHint } from "@/components/layout/narrow-viewport-hint";
 import { ConfirmDialogHost } from "@/components/ui/confirm-dialog-host";
 import { useGlobalHotkeys } from "@/hooks/use-global-hotkeys";
 import { dedupFetch } from "@/lib/api/dedup-fetch";
+import { subscribeConversationEvents } from "@/lib/agents/conversation-events-client";
 import { StatusBar } from "@/components/layout/status-bar";
 import { DaemonHealthBanner } from "@/components/layout/daemon-health-banner";
 import { TourModal } from "@/components/onboarding/tour/tour-modal";
@@ -50,6 +51,7 @@ import {
   isDataDirConfirmed,
 } from "@/components/onboarding/data-dir-prompt";
 import { FeedbackPopup } from "@/components/onboarding/feedback-popup";
+import { DiagnosticsBoot } from "@/components/feedback/diagnostics-boot";
 import { StartWorkDialog, type StartWorkMode } from "@/components/composer/start-work-dialog";
 import { ROOT_CABINET_PATH } from "@/lib/cabinets/paths";
 import { fetchCabinetOverviewClient } from "@/lib/cabinets/overview-client";
@@ -278,7 +280,6 @@ export function AppShell() {
   // non-empty we reload the tree (debounced) so new files appear without a
   // manual refresh. App-wide so it works from any section.
   useEffect(() => {
-    const es = new EventSource("/api/agents/conversations/events");
     let timer: number | null = null;
     const scheduleRefresh = () => {
       if (timer !== null) return;
@@ -287,9 +288,9 @@ export function AppShell() {
         void loadTree();
       }, 400);
     };
-    es.onmessage = (msg) => {
+    const unsubscribe = subscribeConversationEvents((data) => {
       try {
-        const ev = JSON.parse(msg.data) as {
+        const ev = JSON.parse(data) as {
           type?: string;
           payload?: { artifactPaths?: unknown };
         };
@@ -301,9 +302,9 @@ export function AppShell() {
       } catch {
         // ignore malformed frames / pings
       }
-    };
+    });
     return () => {
-      es.close();
+      unsubscribe();
       if (timer !== null) window.clearTimeout(timer);
     };
   }, [loadTree]);
@@ -1028,6 +1029,7 @@ export function AppShell() {
       <NotificationToasts />
       <SystemToasts />
       <FeedbackPopup />
+      <DiagnosticsBoot />
       <TourModal
         open={tour.open}
         onClose={tour.close}

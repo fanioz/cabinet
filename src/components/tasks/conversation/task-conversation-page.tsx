@@ -66,6 +66,7 @@ import type { Task, TaskEvent, TaskStatus } from "@/types/tasks";
 import type { AgentListItem } from "@/types/agents";
 import type { CabinetAgentSummary } from "@/types/cabinets";
 import { compactTask, fetchTask, patchTask, postTurn } from "@/lib/agents/task-client";
+import { subscribeConversationEvents } from "@/lib/agents/conversation-events-client";
 import { peekTaskIsTerminal } from "@/lib/agents/terminal-mode-cache";
 import { buildRuntimeLabel } from "@/lib/agents/runtime-format";
 
@@ -447,6 +448,9 @@ export function TaskConversationPage({
   const turnUser =
     userState.status === "ready" ? userState.data.profile : null;
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Send failures get their own surface: loadError only renders when the
+  // task itself failed to load, so a swallowed send error was invisible.
+  const [sendError, setSendError] = useState<string | null>(null);
   const [connectTimedOut, setConnectTimedOut] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const [editingSummary, setEditingSummary] = useState(false);
@@ -758,7 +762,6 @@ export function TaskConversationPage({
   // per-conversation SSE reconnects late. Debounced to match the board.
   useEffect(() => {
     if (isDemo) return;
-    const es = new EventSource("/api/agents/conversations/events");
     let debounce: ReturnType<typeof setTimeout> | null = null;
     const scheduleRefetch = (_reason: string) => {
       if (debounce) clearTimeout(debounce);
@@ -770,9 +773,9 @@ export function TaskConversationPage({
           .catch(() => {});
       }, 200);
     };
-    es.onmessage = (msg) => {
+    const unsubscribe = subscribeConversationEvents((data) => {
       try {
-        const event = JSON.parse(msg.data) as TaskEvent | { type: "ping" };
+        const event = JSON.parse(data) as TaskEvent | { type: "ping" };
         if (event.type === "ping") return;
         if ("taskId" in event && event.taskId && event.taskId !== taskId) return;
         const eventPayload =
@@ -787,10 +790,10 @@ export function TaskConversationPage({
       } catch {
         // ignore malformed frames
       }
-    };
+    });
     return () => {
       if (debounce) clearTimeout(debounce);
-      es.close();
+      unsubscribe();
     };
   }, [isDemo, taskId, cabinetPath]);
 
@@ -1020,6 +1023,7 @@ export function TaskConversationPage({
       }
 
       setBusy(true);
+      setSendError(null);
       try {
         const result = await postTurn(
           taskId,
@@ -1033,9 +1037,13 @@ export function TaskConversationPage({
           },
           task.meta.cabinetPath
         );
-        setTask(result.task);
+        // postTurn returns task: null when the send was accepted but the
+        // refetch failed — keep the current view and let SSE reconcile.
+        if (result.task) setTask(result.task);
       } catch (e) {
-        setLoadError(e instanceof Error ? e.message : "Failed to send");
+        setSendError(e instanceof Error ? e.message : "Failed to send");
+        // Rethrow so the composer keeps the draft and clears its spinner.
+        throw e;
       } finally {
         setBusy(false);
       }
@@ -1995,6 +2003,7 @@ export function TaskConversationPage({
                         cabinetPath={task.meta.cabinetPath}
                         conversationId={task.meta.id}
                         onSend={handleSend}
+                        sendError={sendError}
                         onScheduleHandoff={openScheduleHandoff}
                         agent={
                           turnAgent
@@ -2094,6 +2103,7 @@ export function TaskConversationPage({
                   cabinetPath={task.meta.cabinetPath}
                   conversationId={task.meta.id}
                   onSend={handleSend}
+                  sendError={sendError}
                   onScheduleHandoff={openScheduleHandoff}
                   agent={
                     turnAgent

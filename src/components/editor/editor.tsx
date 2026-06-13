@@ -38,6 +38,8 @@ async function uploadFile(pagePath: string, file: File): Promise<string | null> 
   }
 }
 
+const WIDE_MODE_KEY = "kb-editor-wide-mode";
+
 function flattenTree(nodes: TreeNode[]): { path: string; name: string }[] {
   const result: { path: string; name: string }[] = [];
   for (const node of nodes) {
@@ -92,7 +94,7 @@ function resolveInternalLink(
   const allPages = flattenTree(nodes);
 
   // Clean up the href: strip .md extension, leading ./ or /
-  let linkPath = href
+  const linkPath = href
     .replace(/\.md$/, "")
     .replace(/^\.\//, "")
     .replace(/^\//, "");
@@ -124,6 +126,26 @@ export function KBEditor() {
   const isLoadingRef = useRef(false);
   const [sourceMode, setSourceMode] = useState(false);
   const [sourceText, setSourceText] = useState("");
+  // Wide mode lifts the max-w-3xl cap on the rendered page so tables get the
+  // full viewport width. Read from localStorage in an effect (not the
+  // initializer) to avoid an SSR hydration mismatch — same pattern as the
+  // sidebar width pref.
+  const [wideMode, setWideMode] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setWideMode(window.localStorage.getItem(WIDE_MODE_KEY) === "1");
+  }, []);
+  const toggleWideMode = useCallback(() => {
+    setWideMode((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(WIDE_MODE_KEY, next ? "1" : "0");
+      } catch {
+        // ignore quota errors
+      }
+      return next;
+    });
+  }, []);
   // Reset the tab to "page" whenever the path changes — opening a new folder
   // shouldn't skip its index.md if the previous folder was on Files. Has to
   // be an effect (not state-during-render) because Tiptap's EditorContent
@@ -167,7 +189,7 @@ export function KBEditor() {
     editorProps: {
       attributes: {
         class:
-          "focus:outline-none min-h-[calc(100vh-12rem)] px-4 sm:px-8 py-6 max-w-3xl mx-auto",
+          "focus:outline-none min-h-[calc(100vh-12rem)] px-4 sm:px-8 py-6 max-w-[var(--editor-max-w,48rem)] mx-auto",
         dir: isRtl ? "rtl" : "ltr",
       },
       handleKeyDown: (view, event) => {
@@ -320,8 +342,15 @@ export function KBEditor() {
 
   // When content updates from store (after loadPage), set it in editor
   const prevPathRef = useRef<string | null>(null);
-  const renderedKeyRef = useRef<string | null>(null);
-  const [renderedPath, setRenderedPath] = useState<string | null>(null);
+  // What the editor DOM currently shows, recorded when the async markdown
+  // render completes. `key` dedupes identical (path, assetBase, content)
+  // renders; `path` (which `key` embeds, so the two never disagree) drives
+  // the loading overlay. One state object — set only in the async
+  // completion — instead of a ref + separate renderedPath state, so the
+  // effect never has to setState synchronously
+  // (react-hooks/set-state-in-effect).
+  const [rendered, setRendered] = useState<{ key: string; path: string } | null>(null);
+  const renderedPath = rendered?.path ?? null;
   useEffect(() => {
     if (!editor || currentPath === null) return;
     // Skip if content hasn't actually changed (same path, dirty edit)
@@ -337,10 +366,7 @@ export function KBEditor() {
     // fallback) re-renders once the fetch reveals a standalone page's real
     // asset base.
     const key = `${currentPath}\u0000${assetBase ?? ""}\u0000${content}`;
-    if (renderedKeyRef.current === key) {
-      if (renderedPath !== currentPath) setRenderedPath(currentPath);
-      return;
-    }
+    if (rendered?.key === key) return;
     prevPathRef.current = currentPath;
 
     const setContent = async () => {
@@ -349,15 +375,14 @@ export function KBEditor() {
       // image refs; currentPath is only correct for directory pages.
       const html = await markdownToHtml(content, assetBase ?? currentPath);
       editor.commands.setContent(html);
-      renderedKeyRef.current = key;
-      setRenderedPath(currentPath);
+      setRendered({ key, path: currentPath });
       setTimeout(() => {
         isLoadingRef.current = false;
       }, 50);
     };
 
     setContent();
-  }, [editor, content, currentPath, assetBase, isLoading, renderedPath]);
+  }, [editor, content, currentPath, assetBase, isLoading, rendered]);
 
   // Push frontmatter.dir into the ProseMirror contenteditable element so list
   // indentation, table cell alignment, and block direction all flip when the
@@ -518,6 +543,8 @@ export function KBEditor() {
         editor={editor}
         sourceMode={sourceMode}
         onToggleSource={toggleSourceMode}
+        wideMode={wideMode}
+        onToggleWide={toggleWideMode}
       />
 
       {sourceMode ? (
@@ -530,7 +557,11 @@ export function KBEditor() {
           />
         </div>
       ) : (
-        <div className="flex-1 relative" dir={isRtl ? "rtl" : undefined}>
+        <div
+          className="flex-1 relative"
+          dir={isRtl ? "rtl" : undefined}
+          style={{ "--editor-max-w": wideMode ? "none" : "48rem" } as React.CSSProperties}
+        >
           <FindBar editor={editor} />
           <div className="absolute inset-0 overflow-y-auto" data-editor-scroll>
             <EditorContent editor={editor} />
@@ -540,7 +571,7 @@ export function KBEditor() {
             <EditorMentionPicker editor={editor} />
 
             {/* AI Edit Prompt + slash hint */}
-            <div className="max-w-3xl mx-auto px-8 pb-8 flex items-center gap-4">
+            <div className="max-w-[var(--editor-max-w,48rem)] mx-auto px-8 pb-8 flex items-center gap-4">
               <button
                 onClick={handleOpenAI}
                 className="group flex items-center gap-2 text-[13px] text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-pointer"

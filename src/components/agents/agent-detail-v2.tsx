@@ -1012,12 +1012,12 @@ function Composer({
 
   const name = getAgentDisplayName(persona) || persona.name;
 
-  const stagingClientUuid = useMemo(
-    () =>
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `c-${Date.now()}`,
-    []
+  // Lazy useState (not useMemo): the initializer runs once per mount, so
+  // the impure id generation never re-executes on re-render.
+  const [stagingClientUuid] = useState(() =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `c-${Date.now()}`
   );
   const attachments = useComposerAttachments({
     cabinetPath: persona.cabinetPath,
