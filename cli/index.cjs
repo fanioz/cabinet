@@ -52,6 +52,30 @@ function resolveCabinetAI() {
   return null;
 }
 
+// Mirror of cabinetai's slugify (cabinetai/src/lib/paths.ts). `cabinetai create`
+// slugifies the name into the directory it writes (e.g. "My Startup" -> ./my-startup/),
+// so we must cd into the slug, not the raw argument, or `create-cabinet "My Startup"`
+// crashes with ENOENT on chdir. Kept in sync manually; resolveCreatedDir falls back
+// to the raw name if the slug isn't present on disk.
+function slugifyDir(name) {
+  return String(name)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/[\s_]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function resolveCreatedDir(name) {
+  for (const candidate of [slugifyDir(name), name]) {
+    if (!candidate) continue;
+    const abs = path.resolve(process.cwd(), candidate);
+    if (fs.existsSync(abs)) return abs;
+  }
+  return path.resolve(process.cwd(), slugifyDir(name) || name);
+}
+
 function pinnedCabinetAIVersion() {
   // Pin the npx fallback to the exact cabinetai version this create-cabinet was published against.
   // Reading from our own dependencies guarantees create-cabinet@N.M.K → cabinetai@N.M.K, never @latest.
@@ -126,8 +150,10 @@ if (createStatus !== 0) {
   process.exit(createStatus);
 }
 
-// Step 2: Run Cabinet from the new directory
-const targetPath = path.resolve(process.cwd(), targetDir);
+// Step 2: Run Cabinet from the new directory. cabinetai create slugifies the
+// name into the directory it wrote, so resolve the actual created directory
+// rather than assuming it matches the raw argument.
+const targetPath = resolveCreatedDir(targetDir);
 process.chdir(targetPath);
 const runStatus = runCabinetAI(["run"]);
 process.exit(runStatus);
