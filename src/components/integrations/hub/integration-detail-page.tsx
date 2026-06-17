@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { showSuccess } from "@/lib/ui/toast";
 import { ConnectPanel } from "@/components/integrations/hub/connect-panel";
 import { GoogleDriveSection } from "@/components/settings/google-drive-section";
+import { GmailSection } from "@/components/settings/gmail-section";
 import { SetupGuide } from "@/components/integrations/hub/setup-guide";
 import { stepArtFor } from "@/components/integrations/hub/generic-setup-art";
 import { getCatalogEntry } from "@/lib/agents/mcp-catalog";
@@ -136,6 +137,12 @@ export function IntegrationDetailPage({
             // inside this section.
             <div className="rounded-2xl border border-border bg-card/40 p-5">
               <GoogleDriveSection />
+            </div>
+          ) : item.id === "gmail" ? (
+            // Gmail connects over IMAP with a Google App Password (its own
+            // routes + skill), not the generic MCP connect flow.
+            <div className="rounded-2xl border border-border bg-card/40 p-5">
+              <GmailSection />
             </div>
           ) : item.implemented ? (
             <ConnectPanel item={item} />
