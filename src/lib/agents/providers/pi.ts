@@ -34,24 +34,82 @@ function withThinkingLevels<T extends { id: string; name: string }>(
 }
 
 /**
+ * Splits a trimmed table line into whitespace-separated columns.
+ */
+function splitColumns(line: string): string[] {
+  return line.split(/\s+/).filter(Boolean);
+}
+
+function parseTable(header: string, rows: string[]) {
+  const headers = splitColumns(header);
+  const modelIdx = headers.findIndex((h) => h.toLowerCase() === "model");
+  const providerIdx = headers.findIndex((h) => h.toLowerCase() === "provider");
+
+  if (modelIdx < 0) return [];
+
+  return rows
+    .map((line) => splitColumns(line))
+    .filter((cols) => cols.length > 0 && cols.length >= modelIdx + 1)
+    .map((cols) => {
+      const provider = providerIdx >= 0 && providerIdx < cols.length ? cols[providerIdx] : undefined;
+      const model = cols[modelIdx] || "";
+
+      if (!model) return null;
+
+      let id: string;
+      if (model.includes("/")) {
+        id = model;
+      } else if (provider) {
+        id = `${provider}/${model}`;
+      } else {
+        id = model;
+      }
+
+      return { id, name: id };
+    })
+    .filter((item): item is { id: string; name: string } => item !== null);
+}
+
+/**
  * Pure parser for `pi --list-models` stdout. Pi routes to whatever providers
  * the user has keyed, so this list is per-machine. Blank lines and `#`
  * comments/banners are dropped; if nothing survives (empty output, or output
  * that is *only* a banner) we fall back to the offline list so the picker is
  * never blank — the same hardening applied to OpenCode (§11 #22).
+ *
+ * Handles both the table format output by recent Pi versions and the legacy
+ * one-model-per-line format.
  */
 export function parsePiModels(stdout: string | null | undefined) {
   const out = (stdout || "").trim();
   if (!out) return withThinkingLevels(PI_FALLBACK_MODELS);
-  const parsed = out
+
+  const lines = out
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("#"))
-    .map((id) => ({
-      id,
-      name: id,
-      effortLevels: [...PI_THINKING_LEVELS],
-    }));
+    .filter((line) => line && !line.startsWith("#"));
+
+  if (lines.length === 0) return withThinkingLevels(PI_FALLBACK_MODELS);
+
+  const firstLine = lines[0].toLowerCase();
+  if (firstLine.includes("provider") && firstLine.includes("model")) {
+    if (lines.length === 1) {
+      return withThinkingLevels(PI_FALLBACK_MODELS);
+    }
+    const parsed = parseTable(lines[0], lines.slice(1));
+    if (parsed.length > 0) {
+      return parsed.map((model) => ({
+        ...model,
+        effortLevels: [...PI_THINKING_LEVELS],
+      }));
+    }
+  }
+
+  const parsed = lines.map((id) => ({
+    id,
+    name: id,
+    effortLevels: [...PI_THINKING_LEVELS],
+  }));
   return parsed.length > 0 ? parsed : withThinkingLevels(PI_FALLBACK_MODELS);
 }
 
