@@ -91,8 +91,8 @@ function modelIdFromLine(line: string): string | null {
 }
 
 /**
- * Heal a stored Pi model id using the same line parser as the model list, so
- * parsing and healing can never drift.
+ * Repair a stored Pi model id using the same line parser as the model list, so
+ * parsing and repair can never drift.
  *
  * Pi shipped a parser (v0.5.0) that could persist an entire `pi --list-models`
  * table row as the model id (e.g. `tfm   glm/glm-5.2   128K  …  no`), breaking
@@ -100,11 +100,12 @@ function modelIdFromLine(line: string): string | null {
  * `modelIdFromLine` collapses them back to `<provider>/<model>` on read — no
  * data migration.
  *
- * Contract: a stale table row heals to `<provider>/<model>`; an already-clean
- * id (including a provider-less bare id like `grok-4.3`, used with a separate
- * `provider`) is returned untouched; empty input and the header row return
- * `undefined`. A clean id only reaches `modelIdFromLine` as a lone token, which
- * drops slash-less ids to `null`, so those are restored from `trimmed` here.
+ * Contract: a stale table row is repaired to `<provider>/<model>`; an
+ * already-clean id (including a provider-less bare id like `grok-4.3`, used
+ * with a separate `provider`) is returned untouched; empty input and the
+ * header row return `undefined`. A clean id only reaches `modelIdFromLine` as a
+ * lone token, which drops slash-less ids to `null`, so those are restored from
+ * `trimmed` here.
  */
 export function normalizePiModelId(
   raw: string | null | undefined
@@ -170,9 +171,9 @@ export const piProvider: AgentProvider = {
     const baseArgs = this.buildArgs ? this.buildArgs(prompt, workdir) : [];
     const args = [...baseArgs];
     if (opts?.model) {
-      // Heal stale persisted table-row values before interpolating into --model.
-      const healed = normalizePiModelId(opts.model) ?? opts.model;
-      args.push("--model", healed);
+      // Repair a stale persisted table-row value before interpolating into --model.
+      const repaired = normalizePiModelId(opts.model) ?? opts.model;
+      args.push("--model", repaired);
     }
     if (opts?.effort) {
       args.push("--thinking", opts.effort);
@@ -187,9 +188,9 @@ export const piProvider: AgentProvider = {
     // Mirrors the install step (`pi --mode json -p 'Reply with exactly OK'`)
     // but pins the resolved default model so verification exercises the
     // user's actual path, not Pi's internal default.
-    const healed =
+    const repaired =
       defaultModel && (normalizePiModelId(defaultModel) ?? defaultModel);
-    const modelArg = healed ? ` --model '${healed}'` : "";
+    const modelArg = repaired ? ` --model '${repaired}'` : "";
     return `pi --mode json${modelArg} -p 'Reply with exactly OK'`;
   },
 

@@ -70,10 +70,10 @@ function buildPiArgs(
 
   const modelInput = readStringConfig(config, "model");
   if (modelInput) {
-    // Heal a stale persisted table-row model id back to <provider>/<model>.
-    const healed = normalizePiModelId(modelInput) ?? modelInput;
+    // Repair a stale persisted table-row model id back to <provider>/<model>.
+    const repaired = normalizePiModelId(modelInput) ?? modelInput;
     const explicitProvider = readStringConfig(config, "provider");
-    const { provider, model } = splitProviderModel(healed);
+    const { provider, model } = splitProviderModel(repaired);
     const effectiveProvider = explicitProvider || provider;
     if (effectiveProvider) args.push("--provider", effectiveProvider);
     if (model) args.push("--model", model);

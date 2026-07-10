@@ -72,19 +72,19 @@ test("pi session codec round-trips session file path", () => {
   assert.equal(codec.getDisplayId?.({ sessionFile: "/tmp/pi/session-1.json" }), "session-1");
 });
 
-test("piLocalAdapter heals a stale table-row model id into clean --provider/--model args", async () => {
+test("piLocalAdapter repairs a stale table-row model id into clean --provider/--model args", async () => {
   const scriptPath = await createExecutableScript(`#!/bin/sh
 printf '%s\\n' '{"type":"agent_start"}' '{"type":"agent_end"}'
 `);
 
   let capturedArgs: string[] | null = null;
   const result = await piLocalAdapter.execute?.({
-    runId: "run-pi-heal",
+    runId: "run-pi-repair",
     adapterType: "pi_local",
     config: {
       command: scriptPath,
       // Stale value persisted before the parser fix: the whole `pi --list-models`
-      // table row. After healing it must become tfm/glm/glm-5.2.
+      // table row. After repair it must become tfm/glm/glm-5.2.
       model:
         "tfm       glm/glm-5.2                                 128K     16.4K    no        no",
       thinking: "off",
@@ -101,7 +101,7 @@ printf '%s\\n' '{"type":"agent_start"}' '{"type":"agent_end"}'
 
   assert.ok(result, "expected a result");
   assert.ok(capturedArgs, "expected onMeta to capture commandArgs");
-  // The healed id tfm/glm/glm-5.2 splits into --provider tfm --model glm/glm-5.2.
+  // The repaired id tfm/glm/glm-5.2 splits into --provider tfm --model glm/glm-5.2.
   // The table stat columns (128K, 16.4K, "no        no") must NOT appear anywhere.
   const args: string[] = capturedArgs;
   const modelIdx = args.indexOf("--model");

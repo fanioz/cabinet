@@ -63,11 +63,12 @@ test("parses a live `pi --list-models` table (mixed slash / slash-less columns)"
   }
 });
 
-// ---- normalizePiModelId: heal stale persisted Pi model values on read -----
-// Healing shares modelIdFromLine with parsePiModels, so these lock the healer's
-// contract for the stored-value cases the parser tests don't cover directly.
+// ---- normalizePiModelId: repair stale persisted Pi model values on read ---
+// Repair shares modelIdFromLine with parsePiModels, so these lock the
+// repairer's contract for the stored-value cases the parser tests don't cover
+// directly.
 
-test("normalizePiModelId heals a stale whole table row into <provider>/<model>", () => {
+test("normalizePiModelId repairs a stale whole table row into <provider>/<model>", () => {
   // slash-in-model row, and a row whose model column has no slash.
   assert.equal(
     normalizePiModelId(
@@ -102,9 +103,9 @@ test("normalizePiModelId leaves a clean id untouched and returns undefined for h
   }
 });
 
-// ---- heal at a consumption site (pi.ts internal) --------------------------
+// ---- repair at a consumption site (pi.ts internal) ------------------------
 
-test("buildVerifyCommand heals a stale table-row model and omits --model when absent", () => {
+test("buildVerifyCommand repairs a stale table-row model and omits --model when absent", () => {
   const cmd = piProvider.buildVerifyCommand!(
     "tfm       glm/glm-5.2                                 128K     16.4K    no        no"
   );
