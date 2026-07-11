@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
+
+// Imperative handle so a parent can type into the session on demand (e.g. a
+// "Run" button that sends a command to an embedded terminal).
+export interface WebTerminalHandle {
+  sendInput: (text: string) => void;
+}
 
 interface WebTerminalProps {
   sessionId?: string;
@@ -68,7 +74,7 @@ function replacePastedTextNotice(output: string, displayPrompt?: string): string
   return output.replace(/\[Pasted text #\d+(?: \+\d+ lines)?\]/g, displayPrompt);
 }
 
-export function WebTerminal({
+export const WebTerminal = forwardRef<WebTerminalHandle, WebTerminalProps>(function WebTerminal({
   sessionId,
   prompt,
   displayPrompt,
@@ -80,11 +86,14 @@ export function WebTerminal({
   reconnect,
   themeSurface = "terminal",
   onClose,
-}: WebTerminalProps) {
+}: WebTerminalProps, ref) {
   const onDataRef = useRef(onData);
   useEffect(() => { onDataRef.current = onData; }, [onData]);
   const termRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  useImperativeHandle(ref, () => ({
+    sendInput: (text: string) => { try { wsRef.current?.send(text); } catch { /* socket gone */ } },
+  }), []);
   const xtermRef = useRef<import("@xterm/xterm").Terminal | null>(null);
   const fitAddonRef = useRef<import("@xterm/addon-fit").FitAddon | null>(null);
   const onCloseRef = useRef(onClose);
@@ -442,4 +451,4 @@ export function WebTerminal({
       />
     </div>
   );
-}
+});

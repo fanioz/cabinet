@@ -1825,7 +1825,8 @@
       "openInBrowser": "Open in browser",
       "showTerminal": "Show terminal",
       "hideTerminal": "Hide terminal",
-      "copyLink": "Copy link"
+      "copyLink": "Copy link",
+      "terminalLabel": "Terminal"
     }
   },
   "sidebar": {
