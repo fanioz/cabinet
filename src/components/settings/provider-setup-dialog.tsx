@@ -210,10 +210,14 @@ function ProviderSetupPanel({ providerId }: { providerId: string }) {
           </button>
         </div>
 
-        {/* Progress rail */}
-        <ProgressRail phase={phase} available={available} authed={authed} t={t} />
+        {/* Progress rail (hidden until the first status lands, to avoid a flash) */}
+        {status !== null && <ProgressRail phase={phase} available={available} authed={authed} t={t} />}
 
-        {ready ? (
+        {status === null ? (
+          <div className="flex flex-1 items-center justify-center p-16">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : ready ? (
           <ReadyPanel name={name} iconSrc={iconSrc} t={t} onClose={close} />
         ) : (
           <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
