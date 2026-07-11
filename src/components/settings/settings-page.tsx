@@ -21,7 +21,6 @@ import {
   Palette,
   Check,
   Info,
-  Terminal,
   ExternalLink,
   ChevronDown,
   Copy,
@@ -59,11 +58,10 @@ import {
   type ThemeDefinition,
   type ThemeMode,
 } from "@/lib/themes";
-import {
-  RuntimeMatrixPicker,
-  RuntimeSelectionBanner,
-} from "@/components/composer/task-runtime-picker";
+import { RuntimeMatrixPicker } from "@/components/composer/task-runtime-picker";
 import { isAgentProviderSelectable } from "@/lib/agents/provider-filters";
+import { ProviderSetupSteps } from "@/components/settings/provider-setup-steps";
+import { ProviderGlyph } from "@/components/agents/provider-glyph";
 import { cn } from "@/lib/utils";
 import { showError } from "@/lib/ui/toast";
 import { confirmDialog } from "@/lib/ui/confirm";
@@ -132,39 +130,7 @@ interface IntegrationConfig {
 
 type Tab = "profile" | "providers" | "skills" | "storage" | "notifications" | "appearance" | "updates" | "about";
 
-function TerminalCommand({ command }: { command: string }) {
-  const { t } = useLocale();
-  const [copied, setCopied] = useState(false);
-
-  const copy = () => {
-    navigator.clipboard.writeText(command);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div
-      className="flex items-center gap-2 rounded-lg px-3 py-2 mt-1.5 font-mono text-[12px]"
-      style={{ background: "#1e1e1e", color: "#d4d4d4" }}
-    >
-      <span style={{ color: "#6A9955" }}>$</span>
-      <span className="flex-1 select-all">{command}</span>
-      <button
-        onClick={copy}
-        className="shrink-0 p-1 rounded transition-colors hover:bg-white/10"
-        title={t("settings:common.copyToClipboard")}
-      >
-        {copied ? (
-          <ClipboardCheck className="size-3.5" style={{ color: "#6A9955" }} />
-        ) : (
-          <Copy className="size-3.5" style={{ color: "#808080" }} />
-        )}
-      </button>
-    </div>
-  );
-}
-
-type SetupStep = { title: string; detail: string; cmd?: string; openTerminal?: boolean; link?: { label: string; url: string } };
+type SetupStep = { title: string; detail: string; command?: string; openTerminal?: boolean; link?: { label: string; url: string } };
 
 function buildProviderSetupSteps(
   installSteps: ProviderInfo["installSteps"]
@@ -179,7 +145,7 @@ function buildProviderSetupSteps(
     ...installSteps.map((step) => ({
       title: step.title,
       detail: step.detail,
-      cmd: step.command,
+      command: step.command,
       link: step.link,
     })),
   ];
@@ -222,11 +188,6 @@ const VERIFY_STATUS_META: Record<VerifyStatus, { label: string; tone: string }> 
   quota_exceeded: { label: "Quota / rate limit", tone: "bg-orange-500/15 text-orange-500" },
   other_error: { label: "Error", tone: "bg-rose-500/10 text-rose-500" },
 };
-
-function matchesFailedStep(stepTitle: string, failedStepTitle?: string): boolean {
-  if (!failedStepTitle) return false;
-  return stepTitle.trim().toLowerCase() === failedStepTitle.trim().toLowerCase();
-}
 
 function LanguageSection() {
   const { locale, setLocale, t } = useLocale();
@@ -621,10 +582,10 @@ export function SettingsPage() {
   const darkThemes = THEMES.filter((t) => t.type === "dark");
   const lightThemes = THEMES.filter((t) => t.type === "light");
 
-  const refresh = useCallback(async (silent = false) => {
+  const refresh = useCallback(async (silent = false, bust = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await fetch("/api/agents/providers");
+      const res = await fetch(`/api/agents/providers${bust ? "?refresh=1" : ""}`);
       if (res.ok) {
         const data = await res.json();
         setProviders(data.providers || []);
@@ -746,6 +707,14 @@ export function SettingsPage() {
     loadConfig();
     loadDataDir();
   }, [refresh, loadConfig, loadDataDir]);
+
+  // The setup dialog fires this when a provider becomes ready — refresh the list
+  // (cache-busted) so the card behind it updates immediately.
+  useEffect(() => {
+    const onChanged = () => void refresh(true, true);
+    window.addEventListener("cabinet:providers-updated", onChanged);
+    return () => window.removeEventListener("cabinet:providers-updated", onChanged);
+  }, [refresh]);
 
   const toggleReveal = (key: string) => {
     setRevealedKeys((prev) => {
@@ -1397,19 +1366,10 @@ export function SettingsPage() {
                 ) : (
                   <div className="space-y-3">
                     <div>
-                      <div className="mb-3 rounded-lg border border-card-edge bg-card p-3 space-y-2">
+                      <div className="mb-6 space-y-2">
                         <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                           {t("settings:providers.defaultRuntime")}
                         </label>
-                        <RuntimeSelectionBanner
-                          providers={providers}
-                          value={{
-                            providerId: defaultProvider || null,
-                            model: defaultModel || null,
-                            effort: defaultEffort || null,
-                          }}
-                          label={t("settings:providers.defaultModel")}
-                        />
                         <RuntimeMatrixPicker
                           providers={providers}
                           value={{
@@ -1458,17 +1418,18 @@ export function SettingsPage() {
                             return (
                               <div
                                 key={provider.id}
-                                className="bg-card border border-card-edge rounded-lg p-3 space-y-2"
+                                className="bg-card rounded-xl p-3 space-y-2"
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-3">
-                                    {isReady ? (
-                                      <CheckCircle className="h-4 w-4 text-green-500" />
-                                    ) : isInstalled ? (
-                                      <XCircle className="h-4 w-4 text-amber-500" />
-                                    ) : (
-                                      <XCircle className="h-4 w-4 text-muted-foreground" />
-                                    )}
+                                    {/* Provider logo + a status dot (ready/installed/none). */}
+                                    <div className="relative shrink-0 text-foreground/80">
+                                      <ProviderGlyph icon={provider.icon} asset={provider.iconAsset} className="h-7 w-7" />
+                                      <span className={cn(
+                                        "absolute -bottom-0.5 -end-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-card",
+                                        isReady ? "bg-green-500" : isInstalled ? "bg-amber-500" : "bg-muted-foreground/40",
+                                      )} />
+                                    </div>
                                     <div>
                                       <p className="text-[13px] font-medium">{provider.name}</p>
                                       <p className={cn("text-[11px]", statusColor)}>
@@ -1482,6 +1443,27 @@ export function SettingsPage() {
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
+                                    {/* Seamless in-app setup (install / log in / verify) —
+                                        the guided popup. Always available so a "ready"
+                                        provider that's actually misbehaving can be
+                                        re-run; prominent when not ready, quiet when it is.
+                                        Guide stays as the manual copy-paste fallback. */}
+                                    <button
+                                      onClick={() => useAppStore.getState().openProviderSetup(provider.id)}
+                                      className={cn(
+                                        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                                        isReady
+                                          ? "border border-border text-foreground/70 hover:bg-muted hover:text-foreground"
+                                          : "bg-primary text-primary-foreground hover:opacity-90",
+                                      )}
+                                      title={t("settings:providerSetup.title", { name: provider.name })}
+                                    >
+                                      {!isInstalled
+                                        ? t("settings:providerSetup.installForMe")
+                                        : !isReady
+                                          ? t("status:server.logIn")
+                                          : t("settings:providerSetup.setUp")}
+                                    </button>
                                     {setupSteps.length > 0 && (
                                       <button
                                         onClick={() => setExpandedProvider(isExpanded ? null : provider.id)}
@@ -1569,70 +1551,20 @@ export function SettingsPage() {
                                       }}
                                     >
                                       <div className="rounded-lg bg-muted/50 p-3 space-y-3">
-                                        {setupSteps.map((step, i) => {
-                                          const isFailedStep =
-                                            result?.status !== undefined &&
-                                            result.status !== "pass" &&
-                                            matchesFailedStep(step.title, result.failedStepTitle);
-                                          const isPassStep =
-                                            result?.status === "pass" &&
-                                            /verify\s+setup/i.test(step.title);
-                                          return (
-                                            <div
-                                              key={i}
-                                              className={cn(
-                                                "flex items-start gap-2.5 rounded-md p-1.5 transition-colors",
-                                                isFailedStep && "bg-rose-500/5 ring-1 ring-rose-500/30",
-                                                isPassStep && "bg-emerald-500/5 ring-1 ring-emerald-500/30"
-                                              )}
-                                            >
-                                              <span
-                                                className={cn(
-                                                  "flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold mt-0.5",
-                                                  isFailedStep
-                                                    ? "bg-rose-500 text-white"
-                                                    : isPassStep
-                                                      ? "bg-emerald-500 text-white"
-                                                      : "bg-primary text-primary-foreground"
-                                                )}
-                                              >
-                                                {isFailedStep ? "!" : isPassStep ? "✓" : i + 1}
-                                              </span>
-                                              <div className="flex-1 min-w-0">
-                                                <p className="text-[13px] font-medium">{step.title}</p>
-                                                <p className="text-[11px] mt-0.5 text-muted-foreground">{step.detail}</p>
-                                                {step.cmd && (
-                                                  <TerminalCommand command={step.cmd} />
-                                                )}
-                                                {step.openTerminal && (
-                                                  <button
-                                                    onClick={() => {
-                                                      fetch("/api/terminal/open", { method: "POST" }).catch(() => {
-                                                        showError("Could not open terminal automatically. Open your system terminal manually.");
-                                                      });
-                                                    }}
-                                                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 mt-1.5 text-[11px] font-medium transition-all hover:-translate-y-0.5"
-                                                    style={{ background: "#1e1e1e", color: "#d4d4d4" }}
-                                                  >
-                                                    <Terminal className="size-3" />
-                                                    Open terminal
-                                                  </button>
-                                                )}
-                                                {step.link && (
-                                                  <a
-                                                    href={step.link.url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="inline-flex items-center gap-1 text-[11px] font-medium mt-1.5 text-primary hover:underline"
-                                                  >
-                                                    {step.link.label}
-                                                    <ExternalLink className="size-3" />
-                                                  </a>
-                                                )}
-                                              </div>
-                                            </div>
-                                          );
-                                        })}
+                                        <ProviderSetupSteps
+                                          steps={setupSteps}
+                                          failedStepTitle={
+                                            result?.status !== undefined && result.status !== "pass"
+                                              ? result.failedStepTitle
+                                              : undefined
+                                          }
+                                          passed={result?.status === "pass"}
+                                          onOpenTerminal={() => {
+                                            fetch("/api/terminal/open", { method: "POST" }).catch(() => {
+                                              showError("Could not open terminal automatically. Open your system terminal manually.");
+                                            });
+                                          }}
+                                        />
                                         <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/60">
                                           <button
                                             onClick={() => void runVerify(provider.id)}
@@ -1735,7 +1667,7 @@ export function SettingsPage() {
                         ].map((p) => (
                           <div
                             key={p.name}
-                            className="flex items-center justify-between bg-card border border-card-edge rounded-lg p-3 opacity-50"
+                            className="flex items-center justify-between bg-card rounded-xl p-3 opacity-50"
                           >
                             <div className="flex items-center gap-3">
                               <XCircle className="h-4 w-4 text-muted-foreground" />
@@ -1865,7 +1797,7 @@ export function SettingsPage() {
                 <div className="flex items-center justify-between py-2 border-b border-border">
                   <span className="text-muted-foreground">{t("settings:about.aiLabel")}</span>
                   <span className="flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5" />
+                    <Cpu className="h-3.5 w-3.5" />
                     {t("settings:about.aiValue")}
                   </span>
                 </div>
