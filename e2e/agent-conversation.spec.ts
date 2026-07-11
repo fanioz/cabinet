@@ -49,8 +49,15 @@ test("a user message runs the agent and its reply renders", async ({ page }) => 
 
   // ...and the agent's reply arrives over SSE once the fake CLI's stream is
   // parsed by the real adapter and flushed into the conversation store.
+  //
+  // .first() matters. The runner performs a follow-up cycle after the opening
+  // turn, and the fake CLI replays the same canned stream on every invocation,
+  // so more than one agent turn can legitimately carry this text. Asserting on
+  // the unfiltered set is a race: locally the assertion resolves before the
+  // second turn lands, but on slower CI both exist and strict mode fails.
   const reply = page
     .locator('[data-testid="turn"][data-turn-role="agent"]')
-    .filter({ hasText: REPLY });
+    .filter({ hasText: REPLY })
+    .first();
   await expect(reply).toBeVisible({ timeout: 60_000 });
 });
