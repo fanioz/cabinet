@@ -92,7 +92,17 @@ export function parsePiModels(stdout: string | null | undefined) {
   if (lines.length === 0) return withThinkingLevels(PI_FALLBACK_MODELS);
 
   const firstLine = lines[0].toLowerCase();
-  if (firstLine.includes("provider") && firstLine.includes("model")) {
+  // A table header is identified by a `model` column plus at least one other
+  // known column. We deliberately do NOT require the `provider` column, since
+  // some Pi versions emit a `model`-only header (with `context`/`thinking`/
+  // `images`); falling back to the legacy one-line-per-id path there would
+  // re-introduce the "whole row saved as the model id" bug.
+  const isTableHeader =
+    firstLine.includes("model") &&
+    ["provider", "context", "max-out", "max", "thinking", "images"].some((col) =>
+      firstLine.includes(col)
+    );
+  if (isTableHeader) {
     if (lines.length === 1) {
       return withThinkingLevels(PI_FALLBACK_MODELS);
     }

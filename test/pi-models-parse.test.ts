@@ -82,3 +82,26 @@ test("table with only header falls back to offline list", () => {
   assert.ok(models.length > 0);
   assert.ok(models.some((m) => m.id === "google/gemini-3.1-pro"));
 });
+
+test("parses table when header lacks a provider column", () => {
+  const input = [
+    "model        context  max-out  thinking  images",
+    "glm/glm-5.2  128K     16.4K    no        no",
+    "gpt-4        8.2K     8.2K     no        no",
+  ].join("\n");
+
+  const models = parsePiModels(input);
+  assert.deepEqual(models.map((m) => m.id), ["glm/glm-5.2", "gpt-4"]);
+  assert.equal(models[0].name, "glm/glm-5.2");
+  assert.ok((models[0].effortLevels || []).some((e) => e.id === "high"));
+});
+
+test("parses table with model lacking slash and no provider column", () => {
+  const input = [
+    "model      context  max-out  thinking  images",
+    "grok-4.3   128K     16.4K    no        no",
+  ].join("\n");
+
+  const models = parsePiModels(input);
+  assert.deepEqual(models.map((m) => m.id), ["grok-4.3"]);
+});
