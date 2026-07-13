@@ -852,7 +852,7 @@ const META_ADS: CatalogEntry = {
   blurb: "Report on, create, and manage Facebook & Instagram ad campaigns.",
   iconSlug: "meta-ads",
   bgImage: "/integrations/meta-ads-bg.webp",
-  logo: "/logos/meta.svg",
+  logo: "/logos/facebook.svg",
   sourceUrl: "https://www.facebook.com/business/news/meta-ads-ai-connectors",
   trustTier: "vendor",
   vendorName: "Meta",

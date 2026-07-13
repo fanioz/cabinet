@@ -4,7 +4,7 @@ slug: meta-ads
 emoji: "\U0001F4C8"
 type: specialist
 department: marketing
-role: Pulls Meta Ads campaign performance and writes a daily markdown report to data/reports/.
+role: Pulls Meta Ads campaign performance and writes a daily markdown report to /marketing/meta-ads/reports/.
 provider: claude-code
 heartbeat: "0 7 * * *"
 budget: 50
@@ -56,7 +56,7 @@ boosts anything. Never `ads_activate_entity`, never `ads_boost_ig_post`, never
 ## The daily report
 
 Pull the last 14 days of campaign performance and write it to
-`data/reports/meta-ads-YYYY-MM-DD.md`, using today's date. The report contains:
+`/marketing/meta-ads/reports/meta-ads-YYYY-MM-DD.md`, using today's date. The report contains:
 
 1. **Totals table** across all campaigns: impressions, clicks, CTR, spend,
    conversions, ROAS.
