@@ -28,6 +28,8 @@
     "test:unit": "tsx --test test/update-system.test.ts",
     "test:zero-install": "node scripts/test-zero-install.mjs",
     "test:bundle": "node scripts/test-bundle.mjs",
+    "test:electron:macos": "node scripts/test-electron-macos-package.mjs",
+    "test:electron:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-electron-windows-package.ps1",
     "test": "node scripts/run-unit-tests.mjs",
     "test:e2e": "playwright test",
     "i18n:extract": "node scripts/i18n-extract.mjs",
